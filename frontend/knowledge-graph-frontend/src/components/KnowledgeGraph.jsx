@@ -30,6 +30,7 @@ const KnowledgeGraph = () => {
   const [rightPanelWidth, setRightPanelWidth] = useState(window.innerWidth / 2); // 右侧AI助手宽度
   const [showLeftPanel, setShowLeftPanel] = useState(true); // 是否显示左侧面板
   const [showRightPanel, setShowRightPanel] = useState(true); // 是否显示右侧面板
+  const [showStatsPanel, setShowStatsPanel] = useState(true); // 是否显示统计面板
   const [isDragging, setIsDragging] = useState(null); // 拖拽状态
   const [graphDimensions, setGraphDimensions] = useState({ width: 800, height: 600 }); // 图谱画布尺寸
   
@@ -552,13 +553,22 @@ const KnowledgeGraph = () => {
       const newWidth = Math.max(200, Math.min(600, e.clientX - containerRect.left));
       setLeftPanelWidth(newWidth);
     } else if (isDragging === 'right') {
-      const newWidth = Math.max(300, Math.min(containerWidth * 0.7, containerRect.right - e.clientX));
+      // 计算右侧面板可用的最大宽度
+      const leftSpace = showLeftPanel ? leftPanelWidth + 1 : 0;
+      const statsSpace = (!showRightPanel && showStatsPanel) ? 320 : 0;
+      const availableSpace = containerWidth - leftSpace - statsSpace - 400; // 保留400px给图谱
+      const newWidth = Math.max(400, Math.min(availableSpace, containerRect.right - e.clientX));
       setRightPanelWidth(newWidth);
     }
+    
+    // 拖拽过程中实时更新画布尺寸
+    requestAnimationFrame(calculateGraphDimensions);
   };
 
   const handleMouseUp = () => {
     setIsDragging(null);
+    // 拖拽结束后重新计算画布尺寸
+    setTimeout(calculateGraphDimensions, 50);
   };
 
   // 添加全局鼠标事件监听
@@ -571,7 +581,7 @@ const KnowledgeGraph = () => {
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging]);
+  }, [isDragging, showLeftPanel, leftPanelWidth, showRightPanel, showStatsPanel]);
 
   // 计算图谱画布尺寸
   const calculateGraphDimensions = () => {
@@ -590,8 +600,8 @@ const KnowledgeGraph = () => {
       availableWidth -= rightPanelWidth + 1; // +1 是分割器宽度
     }
     
-    // 减去右侧统计面板宽度（当AI助手隐藏时）
-    if (!showRightPanel) {
+    // 减去右侧统计面板宽度（当AI助手隐藏且统计面板显示时）
+    if (!showRightPanel && showStatsPanel) {
       availableWidth -= 320; // 统计面板宽度
     }
     
@@ -605,8 +615,9 @@ const KnowledgeGraph = () => {
   React.useEffect(() => {
     const handleResize = () => {
       if (showRightPanel) {
-        // 计算可用宽度：总宽度 - 左侧面板宽度 - 分割器宽度
-        const availableWidth = window.innerWidth - (showLeftPanel ? leftPanelWidth + 1 : 0);
+        // 计算可用宽度：总宽度 - 左侧面板宽度 - 分割器宽度 - 统计面板宽度（如果显示）
+        const statsWidth = (!showRightPanel && showStatsPanel) ? 320 : 0;
+        const availableWidth = window.innerWidth - (showLeftPanel ? leftPanelWidth + 1 : 0) - statsWidth;
         // AI助手占可用宽度的50%，但至少400px，最多不超过可用宽度的70%
         const newWidth = Math.max(400, Math.min(availableWidth * 0.5, availableWidth * 0.7));
         setRightPanelWidth(newWidth);
@@ -617,16 +628,18 @@ const KnowledgeGraph = () => {
     handleResize(); // 立即执行一次
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [showRightPanel, showLeftPanel, leftPanelWidth, rightPanelWidth]);
+  }, [showRightPanel, showLeftPanel, leftPanelWidth, rightPanelWidth, showStatsPanel]);
 
   // 当面板显示状态或宽度改变时重新计算图谱尺寸
   React.useEffect(() => {
     calculateGraphDimensions();
-  }, [showLeftPanel, showRightPanel, leftPanelWidth, rightPanelWidth]);
+  }, [showLeftPanel, showRightPanel, leftPanelWidth, rightPanelWidth, showStatsPanel]);
 
   // 快速布局调整功能
   const setLayoutRatio = (ratio) => {
-    const availableWidth = window.innerWidth - (showLeftPanel ? leftPanelWidth + 1 : 0);
+    const leftSpace = showLeftPanel ? leftPanelWidth + 1 : 0;
+    const statsSpace = showStatsPanel ? 320 : 0;
+    const availableWidth = window.innerWidth - leftSpace - statsSpace;
     const newWidth = Math.max(400, availableWidth * ratio);
     setRightPanelWidth(newWidth);
     setShowRightPanel(true);
@@ -659,6 +672,15 @@ const KnowledgeGraph = () => {
                 <Bot className="w-4 h-4" />
                 <span className="text-xs">AI助手</span>
               </Button>
+              <Button
+                variant={showStatsPanel ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowStatsPanel(!showStatsPanel)}
+                className="flex items-center space-x-1"
+              >
+                <Info className="w-4 h-4" />
+                <span className="text-xs">统计面板</span>
+              </Button>
             </div>
             
             {/* 快速布局按钮 */}
@@ -690,6 +712,18 @@ const KnowledgeGraph = () => {
                 title="AI助手占70%宽度"
               >
                 70%
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowRightPanel(false);
+                  setShowStatsPanel(false);
+                }}
+                className="text-xs px-2"
+                title="图谱全屏模式"
+              >
+                全屏
               </Button>
             </div>
           </div>
@@ -991,8 +1025,8 @@ const KnowledgeGraph = () => {
            </div>
          )}
 
-         {/* 图谱统计侧边栏 - 仅在AI助手隐藏时显示 */}
-         {!showRightPanel && (
+         {/* 图谱统计侧边栏 - 仅在AI助手隐藏且统计面板显示时显示 */}
+         {!showRightPanel && showStatsPanel && (
            <div className="w-80 bg-white border-l p-4 overflow-y-auto flex-shrink-0">
 
           {/* 图谱统计信息 */}
