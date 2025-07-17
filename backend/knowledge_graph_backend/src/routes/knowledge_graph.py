@@ -6,6 +6,12 @@ from flask_cors import CORS
 knowledge_graph_bp = Blueprint('knowledge_graph', __name__)
 CORS(knowledge_graph_bp)
 
+# 默认CSV文件路径
+DEFAULT_CSV_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    'Disease.csv'
+)
+
 def parse_csv_to_graph(csv_file_path):
     """解析CSV文件为知识图谱数据结构"""
     nodes = {}
@@ -51,16 +57,10 @@ def parse_csv_to_graph(csv_file_path):
 def get_graph():
     """获取知识图谱数据"""
     try:
-        # 获取CSV文件路径
-        csv_file_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            'sample_data.csv'
-        )
-        
-        if not os.path.exists(csv_file_path):
+        if not os.path.exists(DEFAULT_CSV_PATH):
             return jsonify({'error': 'CSV文件不存在'}), 404
         
-        graph_data = parse_csv_to_graph(csv_file_path)
+        graph_data = parse_csv_to_graph(DEFAULT_CSV_PATH)
         return jsonify(graph_data)
     
     except Exception as e:
@@ -102,15 +102,10 @@ def search_entities():
         if not query:
             return jsonify({'entities': []})
         
-        csv_file_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            'sample_data.csv'
-        )
-        
-        if not os.path.exists(csv_file_path):
+        if not os.path.exists(DEFAULT_CSV_PATH):
             return jsonify({'error': 'CSV文件不存在'}), 404
         
-        graph_data = parse_csv_to_graph(csv_file_path)
+        graph_data = parse_csv_to_graph(DEFAULT_CSV_PATH)
         
         # 搜索匹配的实体
         matching_entities = []

@@ -5,9 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, Search, Download } from 'lucide-react';
 
+// API基础URL
+const API_BASE_URL = 'http://localhost:5000/api';
+
 const KnowledgeGraph = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
   const graphRef = useRef();
@@ -15,31 +19,35 @@ const KnowledgeGraph = () => {
   // 获取图谱数据
   const fetchGraphData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/graph');
-      if (response.ok) {
-        const data = await response.json();
-        // 转换数据格式以适配ForceGraph2D
-        const formattedData = {
-          nodes: data.nodes.map(node => ({
-            id: node.id,
-            name: node.label,
-            type: node.type,
-            color: getNodeColor(node.label)
-          })),
-          links: data.edges.map(edge => ({
-            source: edge.source,
-            target: edge.target,
-            label: edge.relation,
-            color: '#999'
-          }))
-        };
-        setGraphData(formattedData);
-      } else {
-        console.error('获取图谱数据失败');
+      const response = await fetch(`${API_BASE_URL}/graph`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      // 转换数据格式以适配ForceGraph2D
+      const formattedData = {
+        nodes: data.nodes.map(node => ({
+          id: node.id,
+          name: node.label,
+          type: node.type,
+          color: getNodeColor(node.label)
+        })),
+        links: data.edges.map(edge => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.relation,
+          color: '#999'
+        }))
+      };
+      setGraphData(formattedData);
     } catch (error) {
-      console.error('网络错误:', error);
+      console.error('获取图谱数据失败:', error);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -64,34 +72,38 @@ const KnowledgeGraph = () => {
     formData.append('file', file);
 
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/upload', {
+      const response = await fetch(`${API_BASE_URL}/upload`, {
         method: 'POST',
         body: formData
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const formattedData = {
-          nodes: data.nodes.map(node => ({
-            id: node.id,
-            name: node.label,
-            type: node.type,
-            color: getNodeColor(node.label)
-          })),
-          links: data.edges.map(edge => ({
-            source: edge.source,
-            target: edge.target,
-            label: edge.relation,
-            color: '#999'
-          }))
-        };
-        setGraphData(formattedData);
-      } else {
-        console.error('文件上传失败');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      const formattedData = {
+        nodes: data.nodes.map(node => ({
+          id: node.id,
+          name: node.label,
+          type: node.type,
+          color: getNodeColor(node.label)
+        })),
+        links: data.edges.map(edge => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.relation,
+          color: '#999'
+        }))
+      };
+      setGraphData(formattedData);
     } catch (error) {
-      console.error('上传错误:', error);
+      console.error('文件上传失败:', error);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -101,26 +113,32 @@ const KnowledgeGraph = () => {
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
+    setError(null);
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.entities.length > 0) {
-          // 高亮搜索结果
-          const highlightedData = {
-            ...graphData,
-            nodes: graphData.nodes.map(node => ({
-              ...node,
-              color: data.entities.some(entity => entity.id === node.id) 
-                ? '#ff4757' 
-                : getNodeColor(node.name)
-            }))
-          };
-          setGraphData(highlightedData);
-        }
+      const response = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(searchQuery)}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      if (data.entities.length > 0) {
+        // 高亮搜索结果
+        const highlightedData = {
+          ...graphData,
+          nodes: graphData.nodes.map(node => ({
+            ...node,
+            color: data.entities.some(entity => entity.id === node.id) 
+              ? '#ff4757' 
+              : getNodeColor(node.name)
+          }))
+        };
+        setGraphData(highlightedData);
       }
     } catch (error) {
       console.error('搜索错误:', error);
+      setError(error.message);
     }
   };
 
@@ -197,6 +215,13 @@ const KnowledgeGraph = () => {
       </div>
 
       <div className="flex h-full">
+        {/* 错误提示 */}
+        {error && (
+          <div className="absolute top-20 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
+            <p>{error}</p>
+          </div>
+        )}
+
         {/* 主图谱区域 */}
         <div className="flex-1 relative">
           {loading && (
