@@ -116,37 +116,84 @@ class MedicalKnowledgeGraphAI:
         return index
     
     def search_entities(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """搜索实体"""
+        """搜索实体 - 改进的医疗术语匹配策略"""
         query_lower = query.lower().strip()
         if not query_lower:
             return []
         
         results = []
+        scored_results = []
         
-        # 精确匹配
-        if query_lower in self.entity_index["search_index"]:
-            entity_id = self.entity_index["search_index"][query_lower]
-            if isinstance(entity_id, str):
-                entity_info = self.entity_index["entities"].get(entity_id)
-                if entity_info:
-                    results.append({**entity_info, "match_type": "exact"})
+        # 定义医疗术语映射
+        medical_terms_mapping = {
+            '感冒': ['感冒', '普通感冒', '上呼吸道感染', '流感'],
+            '发烧': ['发热', '发烧', '体温升高', '高热'],
+            '咳嗽': ['咳嗽', '咳痰', '干咳'],
+            '头痛': ['头痛', '头疼', '偏头痛'],
+            '吃什么': ['饮食', '食物', '营养', '治疗', '药物'],
+            '治疗': ['治疗', '疗法', '医治', '药物'],
+            '症状': ['症状', '表现', '体征'],
+        }
         
-        # 部分匹配
-        for key, entity_ids in self.entity_index["search_index"].items():
-            if query_lower in key and len(results) < limit:
-                if isinstance(entity_ids, list):
-                    for entity_id in entity_ids:
-                        entity_info = self.entity_index["entities"].get(entity_id)
-                        if entity_info and entity_info not in results:
-                            results.append({**entity_info, "match_type": "partial"})
-                            if len(results) >= limit:
-                                break
-                elif isinstance(entity_ids, str):
-                    entity_info = self.entity_index["entities"].get(entity_ids)
-                    if entity_info and entity_info not in results:
-                        results.append({**entity_info, "match_type": "partial"})
+        # 扩展查询词
+        expanded_queries = [query_lower]
+        for term, synonyms in medical_terms_mapping.items():
+            if term in query_lower:
+                expanded_queries.extend(synonyms)
         
-        return results[:limit]
+        # 移除重复
+        expanded_queries = list(set(expanded_queries))
+        
+        # 对每个实体进行评分匹配
+        for entity_id, entity_info in self.entity_index["entities"].items():
+            entity_label = entity_info.get("label", "").lower()
+            score = 0
+            match_type = "none"
+            
+            # 精确匹配（最高分）
+            for q in expanded_queries:
+                if q == entity_label:
+                    score = 100
+                    match_type = "exact"
+                    break
+            
+            # 包含匹配
+            if score < 100:
+                for q in expanded_queries:
+                    if q in entity_label or entity_label in q:
+                        score = max(score, 80)
+                        match_type = "contains"
+            
+            # 词语匹配
+            if score < 80:
+                entity_words = set(entity_label.split())
+                for q in expanded_queries:
+                    query_words = set(q.split())
+                    intersection = entity_words & query_words
+                    if intersection:
+                        score = max(score, 60 * len(intersection) / len(query_words))
+                        match_type = "partial"
+            
+            # 疾病特殊匹配
+            if score < 60:
+                for q in expanded_queries:
+                    if ('疾病' in entity_label or '病' in entity_label) and any(w in entity_label for w in q.split()):
+                        score = max(score, 50)
+                        match_type = "disease_related"
+            
+            # 如果有匹配，添加到结果
+            if score > 0:
+                result_entity = {
+                    **entity_info,
+                    "match_type": match_type,
+                    "match_score": score
+                }
+                scored_results.append(result_entity)
+        
+        # 按评分排序，优先显示连接数多的
+        scored_results.sort(key=lambda x: (x["match_score"], x.get("connections", 0)), reverse=True)
+        
+        return scored_results[:limit]
     
     def get_entity_context(self, entity_id: str, depth: int = 1) -> Dict[str, Any]:
         """获取实体的上下文信息"""
@@ -220,41 +267,55 @@ class MedicalKnowledgeGraphAI:
             }
         
         # 搜索相关实体
-        related_entities = self.search_entities(question, limit=5)
+        related_entities = self.search_entities(question, limit=8)
         
-        # 构建上下文信息
+        # 构建详细的上下文信息
         context_info = []
-        for entity in related_entities:
-            entity_context = self.get_entity_context(entity["id"])
-            context_info.append(f"实体：{entity['label']} (ID: {entity['id']})")
-            
-            # 添加关系信息
-            for rel in entity_context.get("relationships", [])[:3]:  # 限制关系数量
-                context_info.append(f"  - {rel['relation']}: {rel['neighbor']['label']}")
+        if related_entities:
+            context_info.append("=== 知识图谱上下文 ===")
+            for entity in related_entities:
+                entity_context = self.get_entity_context(entity["id"])
+                context_info.append(f"\n实体: {entity['label']}")
+                context_info.append(f"ID: {entity['id']}")
+                context_info.append(f"类型: {entity.get('type', '未知')}")
+                context_info.append(f"连接数: {entity.get('connections', 0)}")
+                
+                # 添加关系信息
+                relationships = entity_context.get("relationships", [])
+                if relationships:
+                    context_info.append("关系:")
+                    for rel in relationships[:5]:  # 限制关系数量
+                        direction_symbol = "→" if rel['direction'] == 'outgoing' else "←"
+                        context_info.append(f"  {direction_symbol} {rel['relation']}: {rel['neighbor']['label']} (ID: {rel['neighbor']['id']})")
+                else:
+                    context_info.append("关系: 无直接关系")
+                    
+            context_info.append("\n=== 上下文结束 ===")
         
-        context_text = "\n".join(context_info) if context_info else "未找到直接相关的实体"
+        context_text = "\n".join(context_info) if context_info else "未找到相关实体"
         
         # 调用AI模型
         if AIConfig.MODEL_TYPE == ModelType.OLLAMA:
-            answer = self._call_ollama(question, context_text)
+            answer = self._call_ollama_strict(question, context_text, related_entities)
         else:
             answer = "OpenAI模型暂未实现"
         
-        # 从答案中提取可能的实体引用
-        referenced_entities = self._extract_entity_references(answer, related_entities)
+        # 如果没有找到相关实体，提供标准回答
+        if not related_entities:
+            answer = self._generate_no_knowledge_response(question)
+        
+        # 验证AI回答中的实体引用
+        validated_answer = self._validate_entity_references(answer, related_entities)
         
         # 建议聚焦的节点（选择最相关的实体）
         suggested_focus = related_entities[0]["id"] if related_entities else None
         
-        # 添加医疗免责声明
-        if not any(word in answer.lower() for word in ["免责", "咨询医生", "专业医生"]):
-            answer += "\n\n⚠️ 医疗免责声明：以上信息仅供参考，不能替代专业医疗建议。如有健康问题，请及时咨询专业医生。"
-        
         # 保存到聊天历史
         self.chat_history.append({
             "question": question,
-            "answer": answer,
+            "answer": validated_answer,
             "related_entities": related_entities,
+            "context_used": context_text,
             "timestamp": self._get_timestamp()
         })
         
@@ -263,13 +324,92 @@ class MedicalKnowledgeGraphAI:
         self.current_page = 0
         
         return {
-            "answer": answer,
+            "answer": validated_answer,
             "related_entities": related_entities,
             "suggested_focus": suggested_focus,
             "sources": self._get_paginated_sources(),
             "medical_disclaimer": True,
-            "context_used": context_text
+            "context_used": context_text,
+            "knowledge_graph_coverage": len(related_entities) > 0
         }
+
+    def _call_ollama_strict(self, prompt: str, context: str = "", entities: List[Dict] = None) -> str:
+        """严格调用Ollama模型，强化知识图谱约束"""
+        if not self.llm.get("available", False):
+            return "AI服务暂时不可用，请稍后再试。"
+        
+        try:
+            # 构建严格的提示词
+            full_prompt = f"{AIConfig.MEDICAL_AI_PROMPT}\n\n"
+            
+            if context and entities:
+                full_prompt += f"{context}\n\n"
+                full_prompt += "【可引用的实体ID列表】：\n"
+                for entity in entities:
+                    full_prompt += f"- {entity['label']} (ID: {entity['id']})\n"
+                full_prompt += "\n"
+            else:
+                full_prompt += "知识图谱上下文：无相关实体\n\n"
+            
+            full_prompt += f"用户问题：{prompt}\n\n"
+            full_prompt += "请严格按照上述约束回答，只能使用上述上下文中的信息和实体ID。如果没有相关信息，明确说明知识图谱中未找到相关信息。"
+            
+            # 调用Ollama API
+            response = requests.post(
+                f"{AIConfig.OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": AIConfig.OLLAMA_MODEL_NAME,
+                    "prompt": full_prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.1,  # 降低温度，减少创造性
+                        "top_p": 0.8,
+                        "top_k": 10
+                    }
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("response", "抱歉，AI暂时无法回答您的问题。")
+            else:
+                return f"AI服务错误（状态码：{response.status_code}）"
+                
+        except Exception as e:
+            print(f"[错误] 调用Ollama失败: {str(e)}")
+            return "抱歉，AI服务出现错误，请稍后再试。"
+
+    def _validate_entity_references(self, answer: str, valid_entities: List[Dict]) -> str:
+        """验证AI回答中的实体引用，移除无效的实体ID"""
+        if not valid_entities:
+            return answer
+        
+        # 提取有效的实体ID
+        valid_ids = set(entity['id'] for entity in valid_entities)
+        valid_labels = set(entity['label'] for entity in valid_entities)
+        
+        # 检查回答中是否包含无效的实体ID模式
+        import re
+        
+        # 查找可能的实体ID模式（如 D123, F456, B001 等）
+        id_pattern = r'\b[A-Z]\d+\b'
+        found_ids = re.findall(id_pattern, answer)
+        
+        # 移除无效的实体ID
+        validated_answer = answer
+        for found_id in found_ids:
+            if found_id not in valid_ids:
+                # 移除无效的实体ID引用
+                validated_answer = re.sub(rf'\([^)]*{re.escape(found_id)}[^)]*\)', '', validated_answer)
+                validated_answer = re.sub(rf'\b{re.escape(found_id)}\b', '', validated_answer)
+        
+        # 如果回答中没有引用任何有效实体且原本有相关实体，添加提示
+        has_valid_reference = any(entity['label'] in answer or entity['id'] in answer for entity in valid_entities)
+        if valid_entities and not has_valid_reference and '知识图谱中未找到' not in answer:
+            validated_answer += f"\n\n💡 相关实体：基于您的问题，在知识图谱中找到了相关实体：{', '.join([e['label'] for e in valid_entities[:3]])}，您可以点击查看详情。"
+        
+        return validated_answer
     
     def _extract_entity_references(self, text: str, entities: List[Dict]) -> List[str]:
         """从文本中提取实体引用"""
@@ -344,3 +484,21 @@ class MedicalKnowledgeGraphAI:
         self.knowledge_graph_data = graph_data
         self.entity_index = self._build_entity_index()
         print(f"[信息] 知识图谱已更新，包含 {len(graph_data.get('nodes', []))} 个节点") 
+
+    def _generate_no_knowledge_response(self, question: str) -> str:
+        """生成知识图谱中没有相关信息时的标准回答"""
+        return f"""很抱歉，在当前医疗知识图谱中未找到关于"{question}"的相关信息。
+
+当前知识图谱主要包含以下类型的医疗信息：
+- 疾病相关信息
+- 症状描述
+- 治疗方法
+- 药物信息
+- 检查项目
+- 身体部位
+
+建议您：
+1. 尝试使用更具体的医疗术语重新提问
+2. 咨询专业医生获取准确的医疗建议
+
+⚠️ 医疗免责声明：本系统仅提供基于知识图谱的信息参考，不能替代专业医疗诊断和治疗建议。如有健康问题，请及时就医。""" 

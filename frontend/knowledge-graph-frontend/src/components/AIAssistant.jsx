@@ -188,7 +188,10 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Bot className="h-6 w-6 text-blue-600" />
-            <span className="font-semibold text-gray-800">医疗知识图谱AI助手</span>
+            <div className="flex flex-col">
+              <span className="font-semibold text-gray-800">医疗知识图谱AI助手</span>
+              <span className="text-xs text-gray-600">严格基于知识图谱数据回答</span>
+            </div>
             <Badge variant={aiStatus === 'ready' ? 'default' : 'destructive'}>
               {aiStatus === 'ready' ? '就绪' : '离线'}
             </Badge>
@@ -209,6 +212,11 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
+        </div>
+        
+        {/* 知识图谱约束提示 */}
+        <div className="mt-2 text-xs text-gray-600 bg-blue-50 p-2 rounded">
+          💡 本AI仅基于医疗知识图谱数据回答，不使用训练数据或常识。如果知识图谱中没有相关信息，会明确告知。
         </div>
       </div>
 
@@ -298,7 +306,9 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
                       {/* AI回答的相关实体 */}
                       {message.type === 'ai' && message.relatedEntities && message.relatedEntities.length > 0 && (
                         <div className="mt-2 space-y-1">
-                          <div className="text-xs font-medium opacity-80">相关实体：</div>
+                          <div className="text-xs font-medium opacity-80">
+                            相关实体（来自知识图谱）：
+                          </div>
                           <div className="flex flex-wrap gap-1">
                             {message.relatedEntities.slice(0, 3).map((entity, i) => (
                               <Badge 
@@ -306,11 +316,21 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
                                 variant="secondary" 
                                 className="cursor-pointer text-xs"
                                 onClick={() => handleEntityClick(entity)}
+                                title={`匹配类型：${entity.match_type}, 连接数：${entity.connections}`}
                               >
                                 {entity.label}
                               </Badge>
                             ))}
                           </div>
+                        </div>
+                      )}
+                      
+                      {/* 显示知识图谱覆盖情况 */}
+                      {message.type === 'ai' && (
+                        <div className="mt-1 text-xs opacity-60">
+                          {message.relatedEntities && message.relatedEntities.length > 0 
+                            ? `🔗 基于 ${message.relatedEntities.length} 个知识图谱实体` 
+                            : '⚠️ 知识图谱中未找到相关实体'}
                         </div>
                       )}
                       
