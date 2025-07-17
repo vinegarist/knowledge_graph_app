@@ -1,0 +1,21 @@
+# 忽略前端依赖目录
+node_modules/
+
+# Python 编译文件
+__pycache__/
+*.pyc
+
+# 数据库文件
+*.db
+
+# 其他常见忽略
+.env
+.DS_Store
+*.log
+
+# Vite/React 构建产物
+/dist
+/build
+
+# VSCode 配置
+.vscode/
