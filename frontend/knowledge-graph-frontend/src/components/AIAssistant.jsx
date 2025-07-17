@@ -37,6 +37,39 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   
   const chatContainerRef = useRef(null);
 
+  // 缓存管理函数
+  const clearCache = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/cache/clear`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('缓存已清除');
+        checkAIStatus(); // 重新检查状态
+      }
+    } catch (error) {
+      console.error('清除缓存失败:', error);
+    }
+  };
+
+  const reloadCache = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/ai/cache/reload`, {
+        method: 'POST',
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('缓存已重新加载:', data.data);
+        checkAIStatus(); // 重新检查状态
+      }
+    } catch (error) {
+      console.error('重新加载缓存失败:', error);
+    }
+  };
+
   // 初始化时检查AI状态
   useEffect(() => {
     checkAIStatus();
@@ -201,6 +234,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
               variant="outline"
               size="sm"
               onClick={() => setShowSearch(!showSearch)}
+              title="搜索实体"
             >
               <Search className="h-4 w-4" />
             </Button>
@@ -208,15 +242,34 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
               variant="outline"
               size="sm"
               onClick={checkAIStatus}
+              title="检查AI状态"
             >
               <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={reloadCache}
+              title="重新加载缓存"
+            >
+              <Loader2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearCache}
+              title="清除缓存"
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
         
         {/* 知识图谱约束提示 */}
         <div className="mt-2 text-xs text-gray-600 bg-blue-50 p-2 rounded">
-          💡 本AI仅基于医疗知识图谱数据回答，不使用训练数据或常识。如果知识图谱中没有相关信息，会明确告知。
+          💡 本AI仅基于医疗知识图谱数据回答，不使用训练数据或常识。
+          <br />
+          ⚡ 已启用智能缓存，大幅提升搜索和加载速度。如果知识图谱中没有相关信息，会明确告知。
         </div>
       </div>
 

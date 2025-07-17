@@ -8,25 +8,30 @@ import requests
 from collections import defaultdict
 
 from src.config.ai_config import AIConfig, ModelType
+from src.utils.graph_cache import graph_cache
 
 class MedicalKnowledgeGraphAI:
     """医疗知识图谱AI助手"""
     
-    def __init__(self, knowledge_graph_data: Dict[str, Any] = None):
+    def __init__(self, knowledge_graph_data: Optional[Dict[str, Any]] = None):
         """
         初始化医疗AI助手
         
         Args:
             knowledge_graph_data: 知识图谱数据，包含nodes和links
         """
-        self.knowledge_graph_data = knowledge_graph_data or {"nodes": [], "links": []}
+        if knowledge_graph_data:
+            self.knowledge_graph_data = knowledge_graph_data
+        else:
+            self.knowledge_graph_data = {"nodes": [], "links": []}
+            
         self.chat_history = []
         self.current_sources = []
         self.current_page = 0
         self.sources_per_page = AIConfig.SOURCES_PAGE_SIZE
         
-        # 构建实体索引用于快速查找
-        self.entity_index = self._build_entity_index()
+        # 使用优化的缓存系统
+        self._use_cache = True
         
         # 初始化LLM
         self.llm = self._init_llm()
@@ -41,8 +46,12 @@ class MedicalKnowledgeGraphAI:
     def _init_ollama(self):
         """初始化Ollama模型"""
         try:
-            # 检查Ollama服务可用性
-            response = requests.get(f"{AIConfig.OLLAMA_BASE_URL}/api/tags", timeout=5)
+            # 检查Ollama服务可用性（禁用代理）
+            response = requests.get(
+                f"{AIConfig.OLLAMA_BASE_URL}/api/tags", 
+                timeout=5,
+                proxies={'http': '', 'https': ''}
+            )
             if response.status_code == 200:
                 print(f"[信息] Ollama服务可用: {AIConfig.OLLAMA_BASE_URL}")
                 return {"type": "ollama", "available": True}
@@ -59,7 +68,11 @@ class MedicalKnowledgeGraphAI:
         return {"type": "openai", "available": True}
     
     def _build_entity_index(self) -> Dict[str, Any]:
-        """构建实体索引用于快速搜索"""
+        """
+        构建实体索引用于快速搜索
+        注意：此方法已废弃，现在使用graph_cache中的优化索引系统
+        """
+        print("[警告] _build_entity_index方法已废弃，请使用graph_cache优化索引系统")
         index = {
             "entities": {},  # 实体ID到实体信息的映射
             "relationships": defaultdict(list),  # 实体间关系
@@ -116,88 +129,136 @@ class MedicalKnowledgeGraphAI:
         return index
     
     def search_entities(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """搜索实体 - 改进的医疗术语匹配策略"""
+        """
+        快速搜索实体 - 使用优化的索引算法
+        时间复杂度从 O(E×Q×W) 降低到 O(log N)
+        """
+        if not query.strip():
+            return []
+        
+        # 优先使用缓存的快速搜索
+        if self._use_cache and graph_cache.get_cached_graph():
+            return graph_cache.search_entities_fast(query, limit)
+        
+        # 备用：原始搜索算法
+        return self._search_entities_fallback(query, limit)
+    
+    def _search_entities_fallback(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """备用搜索算法 - 当缓存不可用时使用"""
         query_lower = query.lower().strip()
         if not query_lower:
             return []
         
-        results = []
         scored_results = []
         
-        # 定义医疗术语映射
-        medical_terms_mapping = {
-            '感冒': ['感冒', '普通感冒', '上呼吸道感染', '流感'],
-            '发烧': ['发热', '发烧', '体温升高', '高热'],
+        # 简化的医疗术语映射
+        medical_terms = {
+            '感冒': ['感冒', '普通感冒', '上呼吸道感染'],
+            '发烧': ['发热', '发烧', '体温升高'],
             '咳嗽': ['咳嗽', '咳痰', '干咳'],
-            '头痛': ['头痛', '头疼', '偏头痛'],
-            '吃什么': ['饮食', '食物', '营养', '治疗', '药物'],
-            '治疗': ['治疗', '疗法', '医治', '药物'],
-            '症状': ['症状', '表现', '体征'],
+            '头痛': ['头痛', '头疼', '偏头痛']
         }
         
         # 扩展查询词
         expanded_queries = [query_lower]
-        for term, synonyms in medical_terms_mapping.items():
+        for term, synonyms in medical_terms.items():
             if term in query_lower:
                 expanded_queries.extend(synonyms)
         
-        # 移除重复
-        expanded_queries = list(set(expanded_queries))
-        
-        # 对每个实体进行评分匹配
-        for entity_id, entity_info in self.entity_index["entities"].items():
-            entity_label = entity_info.get("label", "").lower()
+        # 快速匹配评分
+        for node in self.knowledge_graph_data.get("nodes", []):
+            entity_label = node.get("label", "").lower()
             score = 0
             match_type = "none"
             
-            # 精确匹配（最高分）
-            for q in expanded_queries:
-                if q == entity_label:
-                    score = 100
-                    match_type = "exact"
-                    break
-            
+            # 精确匹配
+            if query_lower == entity_label:
+                score = 100
+                match_type = "exact"
             # 包含匹配
-            if score < 100:
-                for q in expanded_queries:
-                    if q in entity_label or entity_label in q:
-                        score = max(score, 80)
-                        match_type = "contains"
-            
+            elif query_lower in entity_label or entity_label in query_lower:
+                score = 80
+                match_type = "contains"
             # 词语匹配
-            if score < 80:
+            else:
+                query_words = set(query_lower.split())
                 entity_words = set(entity_label.split())
-                for q in expanded_queries:
-                    query_words = set(q.split())
-                    intersection = entity_words & query_words
-                    if intersection:
-                        score = max(score, 60 * len(intersection) / len(query_words))
-                        match_type = "partial"
+                intersection = query_words & entity_words
+                if intersection:
+                    score = 60 * len(intersection) / len(query_words)
+                    match_type = "partial"
             
-            # 疾病特殊匹配
-            if score < 60:
-                for q in expanded_queries:
-                    if ('疾病' in entity_label or '病' in entity_label) and any(w in entity_label for w in q.split()):
-                        score = max(score, 50)
-                        match_type = "disease_related"
-            
-            # 如果有匹配，添加到结果
             if score > 0:
                 result_entity = {
-                    **entity_info,
+                    **node,
                     "match_type": match_type,
                     "match_score": score
                 }
                 scored_results.append(result_entity)
         
-        # 按评分排序，优先显示连接数多的
+        # 排序并返回
         scored_results.sort(key=lambda x: (x["match_score"], x.get("connections", 0)), reverse=True)
-        
         return scored_results[:limit]
     
     def get_entity_context(self, entity_id: str, depth: int = 1) -> Dict[str, Any]:
         """获取实体的上下文信息"""
-        entity = self.entity_index["entities"].get(entity_id)
+        # 优先使用缓存的实体信息
+        if self._use_cache and graph_cache.get_cached_graph():
+            cached_graph = graph_cache.get_cached_graph()
+            if not cached_graph:
+                return {}
+                
+            entity = None
+            
+            # 查找实体
+            for node in cached_graph.get('nodes', []):
+                if node.get('id') == entity_id:
+                    entity = node
+                    break
+            
+            if not entity:
+                return {}
+            
+            context = {
+                "entity": entity,
+                "relationships": [],
+                "neighbors": []
+            }
+            
+            # 获取关系
+            for edge in cached_graph.get('edges', []):
+                if edge['source'] == entity_id:
+                    # 查找目标节点
+                    for node in cached_graph.get('nodes', []):
+                        if node.get('id') == edge['target']:
+                            context["relationships"].append({
+                                "relation": edge['relation'],
+                                "direction": "outgoing",
+                                "neighbor": node
+                            })
+                            context["neighbors"].append(node)
+                            break
+                elif edge['target'] == entity_id:
+                    # 查找源节点
+                    for node in cached_graph.get('nodes', []):
+                        if node.get('id') == edge['source']:
+                            context["relationships"].append({
+                                "relation": edge['relation'],
+                                "direction": "incoming",
+                                "neighbor": node
+                            })
+                            context["neighbors"].append(node)
+                            break
+            
+            return context
+        
+        # 备用：直接从知识图谱数据查找
+        entity = None
+        for node in self.knowledge_graph_data.get('nodes', []):
+            if node.get('id') == entity_id:
+                entity = node
+                break
+        
         if not entity:
             return {}
         
@@ -207,18 +268,22 @@ class MedicalKnowledgeGraphAI:
             "neighbors": []
         }
         
-        # 获取直接关系
-        relationships = self.entity_index["relationships"].get(entity_id, [])
-        for rel in relationships:
-            neighbor_id = rel["target"]
-            neighbor = self.entity_index["entities"].get(neighbor_id)
-            if neighbor:
-                context["relationships"].append({
-                    "relation": rel["relation"],
-                    "direction": rel["direction"],
-                    "neighbor": neighbor
-                })
-                context["neighbors"].append(neighbor)
+        # 获取关系（简化版本）
+        for edge in self.knowledge_graph_data.get('edges', []):
+            if edge['source'] == entity_id or edge['target'] == entity_id:
+                neighbor_id = edge['target'] if edge['source'] == entity_id else edge['source']
+                direction = "outgoing" if edge['source'] == entity_id else "incoming"
+                
+                # 查找邻居节点
+                for node in self.knowledge_graph_data.get('nodes', []):
+                    if node.get('id') == neighbor_id:
+                        context["relationships"].append({
+                            "relation": edge['relation'],
+                            "direction": direction,
+                            "neighbor": node
+                        })
+                        context["neighbors"].append(node)
+                        break
         
         return context
     
@@ -234,7 +299,7 @@ class MedicalKnowledgeGraphAI:
                 full_prompt += f"知识图谱上下文：\n{context}\n\n"
             full_prompt += f"用户问题：{prompt}\n\n请基于上述信息回答用户问题。"
             
-            # 调用Ollama API
+            # 调用Ollama API（禁用代理）
             response = requests.post(
                 f"{AIConfig.OLLAMA_BASE_URL}/api/generate",
                 json={
@@ -242,7 +307,8 @@ class MedicalKnowledgeGraphAI:
                     "prompt": full_prompt,
                     "stream": False
                 },
-                timeout=30
+                timeout=30,
+                proxies={'http': '', 'https': ''}  # 禁用代理
             )
             
             if response.status_code == 200:
@@ -333,7 +399,7 @@ class MedicalKnowledgeGraphAI:
             "knowledge_graph_coverage": len(related_entities) > 0
         }
 
-    def _call_ollama_strict(self, prompt: str, context: str = "", entities: List[Dict] = None) -> str:
+    def _call_ollama_strict(self, prompt: str, context: str = "", entities: Optional[List[Dict]] = None) -> str:
         """严格调用Ollama模型，强化知识图谱约束"""
         if not self.llm.get("available", False):
             return "AI服务暂时不可用，请稍后再试。"
@@ -354,7 +420,7 @@ class MedicalKnowledgeGraphAI:
             full_prompt += f"用户问题：{prompt}\n\n"
             full_prompt += "请严格按照上述约束回答，只能使用上述上下文中的信息和实体ID。如果没有相关信息，明确说明知识图谱中未找到相关信息。"
             
-            # 调用Ollama API
+            # 调用Ollama API（禁用代理）
             response = requests.post(
                 f"{AIConfig.OLLAMA_BASE_URL}/api/generate",
                 json={
@@ -367,7 +433,8 @@ class MedicalKnowledgeGraphAI:
                         "top_k": 10
                     }
                 },
-                timeout=30
+                timeout=30,
+                proxies={'http': '', 'https': ''}  # 禁用代理
             )
             
             if response.status_code == 200:
@@ -453,16 +520,16 @@ class MedicalKnowledgeGraphAI:
             self.current_page -= 1
         return self._get_paginated_sources()
     
-    def get_chat_history(self, page: int = 1, page_size: int = None) -> Dict[str, Any]:
+    def get_chat_history(self, page: int = 1, page_size: Optional[int] = None) -> Dict[str, Any]:
         """获取分页的聊天历史"""
-        if page_size is None:
-            page_size = AIConfig.CHAT_PAGE_SIZE
+        # 确保page_size是int类型
+        actual_page_size: int = page_size if page_size is not None else AIConfig.CHAT_PAGE_SIZE
         
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
+        start_idx = (page - 1) * actual_page_size
+        end_idx = start_idx + actual_page_size
         
         page_history = self.chat_history[start_idx:end_idx]
-        total_pages = (len(self.chat_history) + page_size - 1) // page_size
+        total_pages = (len(self.chat_history) + actual_page_size - 1) // actual_page_size
         
         return {
             "history": page_history,
@@ -482,8 +549,19 @@ class MedicalKnowledgeGraphAI:
     def update_knowledge_graph(self, graph_data: Dict[str, Any]):
         """更新知识图谱数据"""
         self.knowledge_graph_data = graph_data
-        self.entity_index = self._build_entity_index()
+        # 不再使用entity_index，改用缓存系统
         print(f"[信息] 知识图谱已更新，包含 {len(graph_data.get('nodes', []))} 个节点") 
+
+    def update_knowledge_graph_from_file(self, csv_file_path: str, force_reload: bool = False):
+        """从CSV文件更新知识图谱，使用缓存优化"""
+        try:
+            # 使用优化的缓存加载
+            graph_data = graph_cache.load_graph(csv_file_path, force_reload)
+            self.knowledge_graph_data = graph_data
+            print(f"[信息] 知识图谱已更新，包含 {len(graph_data.get('nodes', []))} 个节点")
+        except Exception as e:
+            print(f"[错误] 更新知识图谱失败: {str(e)}")
+            self.knowledge_graph_data = {"nodes": [], "links": []}
 
     def _generate_no_knowledge_response(self, question: str) -> str:
         """生成知识图谱中没有相关信息时的标准回答"""

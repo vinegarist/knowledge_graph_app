@@ -6,7 +6,7 @@ from flask_cors import CORS
 import json
 import os
 from src.ai.medical_ai import MedicalKnowledgeGraphAI
-from src.routes.knowledge_graph import parse_csv_to_full_graph
+from src.utils.graph_cache import graph_cache
 
 ai_bp = Blueprint('ai_assistant', __name__)
 CORS(ai_bp)
@@ -15,7 +15,7 @@ CORS(ai_bp)
 ai_assistant = None
 
 def init_ai_assistant():
-    """初始化AI助手"""
+    """初始化AI助手 - 使用优化的缓存系统"""
     global ai_assistant
     
     # 获取知识图谱数据
@@ -26,9 +26,10 @@ def init_ai_assistant():
     
     try:
         if os.path.exists(csv_path):
-            graph_data = parse_csv_to_full_graph(csv_path)
-            ai_assistant = MedicalKnowledgeGraphAI(graph_data)
-            print(f"[信息] AI助手初始化成功，加载了 {len(graph_data['nodes'])} 个节点")
+            # 使用优化的缓存加载
+            ai_assistant = MedicalKnowledgeGraphAI()
+            ai_assistant.update_knowledge_graph_from_file(csv_path)
+            print(f"[信息] AI助手初始化成功（使用缓存优化）")
         else:
             print(f"[警告] CSV文件不存在: {csv_path}")
             ai_assistant = MedicalKnowledgeGraphAI()
@@ -38,6 +39,54 @@ def init_ai_assistant():
 
 # 初始化AI助手
 init_ai_assistant()
+
+@ai_bp.route('/ai/cache/clear', methods=['POST'])
+def clear_cache():
+    """清除知识图谱缓存"""
+    try:
+        graph_cache.clear_cache()
+        # 重新初始化AI助手
+        init_ai_assistant()
+        
+        return jsonify({
+            'success': True,
+            'message': '缓存已清除并重新加载'
+        })
+        
+    except Exception as e:
+        print(f"[错误] 清除缓存失败: {str(e)}")
+        return jsonify({'error': f'清除缓存时出错: {str(e)}'}), 500
+
+@ai_bp.route('/ai/cache/reload', methods=['POST'])
+def reload_cache():
+    """强制重新加载知识图谱缓存"""
+    try:
+        csv_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'Disease.csv'
+        )
+        
+        if ai_assistant and os.path.exists(csv_path):
+            ai_assistant.update_knowledge_graph_from_file(csv_path, force_reload=True)
+            
+            # 获取缓存统计
+            cached_graph = graph_cache.get_cached_graph()
+            stats = {
+                'nodes_count': len(cached_graph.get('nodes', [])) if cached_graph else 0,
+                'edges_count': len(cached_graph.get('edges', [])) if cached_graph else 0
+            }
+            
+            return jsonify({
+                'success': True,
+                'message': '知识图谱已强制重新加载',
+                'data': stats
+            })
+        else:
+            return jsonify({'error': 'AI助手未初始化或CSV文件不存在'}), 500
+        
+    except Exception as e:
+        print(f"[错误] 重新加载缓存失败: {str(e)}")
+        return jsonify({'error': f'重新加载时出错: {str(e)}'}), 500
 
 @ai_bp.route('/ai/chat', methods=['POST'])
 def chat():
@@ -194,11 +243,21 @@ def get_ai_status():
             })
         
         # 检查知识图谱数据
-        graph_stats = {
-            'nodes_count': len(ai_assistant.knowledge_graph_data.get('nodes', [])),
-            'links_count': len(ai_assistant.knowledge_graph_data.get('links', [])),
-            'entities_indexed': len(ai_assistant.entity_index.get('entities', {}))
-        }
+        cached_graph = graph_cache.get_cached_graph()
+        if cached_graph:
+            graph_stats = {
+                'nodes_count': len(cached_graph.get('nodes', [])),
+                'links_count': len(cached_graph.get('edges', [])),
+                'entities_indexed': len(cached_graph.get('nodes', [])),  # 使用缓存中的节点数量
+                'cache_status': 'active'
+            }
+        else:
+            graph_stats = {
+                'nodes_count': len(ai_assistant.knowledge_graph_data.get('nodes', [])),
+                'links_count': len(ai_assistant.knowledge_graph_data.get('edges', [])),
+                'entities_indexed': len(ai_assistant.knowledge_graph_data.get('nodes', [])),
+                'cache_status': 'inactive'
+            }
         
         # 检查LLM状态
         llm_status = ai_assistant.llm

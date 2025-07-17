@@ -4,6 +4,8 @@ from flask import Blueprint, jsonify, request
 from flask_cors import CORS
 from collections import defaultdict
 import math
+import time
+import pickle
 
 knowledge_graph_bp = Blueprint('knowledge_graph', __name__)
 CORS(knowledge_graph_bp)
@@ -14,60 +16,125 @@ DEFAULT_CSV_PATH = os.path.join(
     'Disease.csv'
 )
 
-def parse_csv_to_full_graph(csv_file_path):
-    """解析CSV文件为完整的知识图谱数据结构"""
+# 全局缓存
+_graph_cache = None
+_cache_timestamp = None
+_csv_file_path = DEFAULT_CSV_PATH
+
+def _get_file_mtime(file_path):
+    """获取文件修改时间"""
+    try:
+        return os.path.getmtime(file_path)
+    except OSError:
+        return 0
+
+def _is_cache_valid():
+    """检查缓存是否有效"""
+    global _cache_timestamp
+    if _graph_cache is None or _cache_timestamp is None:
+        return False
+    
+    current_mtime = _get_file_mtime(_csv_file_path)
+    return current_mtime <= _cache_timestamp
+
+def parse_csv_to_full_graph_optimized(csv_file_path):
+    """优化的CSV解析器 - 使用缓存和单次读取"""
+    global _graph_cache, _cache_timestamp, _csv_file_path
+    
+    # 更新文件路径
+    _csv_file_path = csv_file_path
+    
+    # 检查缓存
+    if _is_cache_valid():
+        print(f"[缓存] 使用缓存的知识图谱数据")
+        return _graph_cache
+    
+    print(f"[解析] 开始解析CSV文件: {csv_file_path}")
+    start_time = time.time()
+    
     nodes = {}
     edges = []
     node_connections = defaultdict(int)
     
-    # 第一遍扫描：统计节点的连接数
-    with open(csv_file_path, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if len(row) >= 3:
-                source = row[0].strip()
-                target = row[2].strip()
-                node_connections[source] += 1
-                node_connections[target] += 1
-    
-    # 第二遍扫描：构建图
-    with open(csv_file_path, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            if len(row) >= 3:
-                source = row[0].strip()
-                relation = row[1].strip()
-                target = row[2].strip()
-                
-                # 添加节点
-                if source not in nodes:
-                    nodes[source] = {
-                        'id': source,
-                        'label': source,
-                        'type': 'entity',
-                        'connections': node_connections[source]
-                    }
-                
-                if target not in nodes:
-                    nodes[target] = {
-                        'id': target,
-                        'label': target,
-                        'type': 'entity',
-                        'connections': node_connections[target]
-                    }
-                
-                # 添加边
-                edges.append({
-                    'source': source,
-                    'target': target,
-                    'relation': relation,
-                    'label': relation
-                })
-    
-    return {
-        'nodes': list(nodes.values()),
-        'edges': edges
-    }
+    # 单次读取，同时统计连接数和构建图
+    try:
+        with open(csv_file_path, 'r', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            row_count = 0
+            
+            for row in reader:
+                if len(row) >= 3:
+                    source = row[0].strip()
+                    relation = row[1].strip()
+                    target = row[2].strip()
+                    
+                    # 统计连接数
+                    node_connections[source] += 1
+                    node_connections[target] += 1
+                    
+                    # 临时存储边信息
+                    edges.append({
+                        'source': source,
+                        'target': target,
+                        'relation': relation,
+                        'label': relation
+                    })
+                    
+                    row_count += 1
+                    
+                    # 批量进度显示
+                    if row_count % 10000 == 0:
+                        print(f"[解析] 已处理 {row_count} 行")
+        
+        # 构建节点（只需一次循环）
+        for edge in edges:
+            source, target = edge['source'], edge['target']
+            
+            if source not in nodes:
+                nodes[source] = {
+                    'id': source,
+                    'label': source,
+                    'type': 'entity',
+                    'connections': node_connections[source]
+                }
+            
+            if target not in nodes:
+                nodes[target] = {
+                    'id': target,
+                    'label': target,
+                    'type': 'entity',
+                    'connections': node_connections[target]
+                }
+        
+        result = {
+            'nodes': list(nodes.values()),
+            'edges': edges
+        }
+        
+        # 更新缓存
+        _graph_cache = result
+        _cache_timestamp = time.time()
+        
+        end_time = time.time()
+        print(f"[解析] 完成! 耗时 {end_time - start_time:.2f}s, "
+              f"节点: {len(result['nodes'])}, 边: {len(result['edges'])}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"[错误] CSV解析失败: {str(e)}")
+        return {'nodes': [], 'edges': []}
+
+def parse_csv_to_full_graph(csv_file_path):
+    """保持向后兼容的接口"""
+    return parse_csv_to_full_graph_optimized(csv_file_path)
+
+def invalidate_cache():
+    """手动清除缓存"""
+    global _graph_cache, _cache_timestamp
+    _graph_cache = None
+    _cache_timestamp = None
+    print("[缓存] 已清除知识图谱缓存")
 
 def get_paginated_graph(full_graph, page=1, page_size=50):
     """获取分页的图谱数据"""
@@ -128,11 +195,17 @@ def get_graph_info():
             
         full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
         
+        if not full_graph or 'nodes' not in full_graph or 'edges' not in full_graph:
+            return jsonify({'error': '无法加载知识图谱数据'}), 500
+        
+        nodes = full_graph['nodes']
+        edges = full_graph['edges']
+        
         return jsonify({
-            'total_nodes': len(full_graph['nodes']),
-            'total_edges': len(full_graph['edges']),
-            'max_connections': max(node['connections'] for node in full_graph['nodes']) if full_graph['nodes'] else 0,
-            'min_connections': min(node['connections'] for node in full_graph['nodes']) if full_graph['nodes'] else 0
+            'total_nodes': len(nodes),
+            'total_edges': len(edges),
+            'max_connections': max(node['connections'] for node in nodes) if nodes else 0,
+            'min_connections': min(node['connections'] for node in nodes) if nodes else 0
         })
         
     except Exception as e:
@@ -150,6 +223,9 @@ def expand_node():
             return jsonify({'error': 'CSV文件不存在'}), 404
             
         full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
+        
+        if not full_graph or 'nodes' not in full_graph or 'edges' not in full_graph:
+            return jsonify({'error': '无法加载知识图谱数据'}), 500
         
         # 找出与指定节点直接相连的所有节点和边
         related_node_ids = {node_id}
@@ -186,6 +262,9 @@ def get_node_neighbors():
             return jsonify({'error': 'CSV文件不存在'}), 404
             
         full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
+        
+        if not full_graph or 'nodes' not in full_graph or 'edges' not in full_graph:
+            return jsonify({'error': '无法加载知识图谱数据'}), 500
         
         # 找出与指定节点直接相连的所有节点和边
         neighbor_node_ids = {node_id}  # 包含目标节点本身
@@ -224,10 +303,10 @@ def upload_csv():
             return jsonify({'error': '没有文件上传'}), 400
         
         file = request.files['file']
-        if file.filename == '':
+        if file.filename == '' or file.filename is None:
             return jsonify({'error': '没有选择文件'}), 400
         
-        if file and file.filename.endswith('.csv'):
+        if file and file.filename and file.filename.endswith('.csv'):
             # 保存文件
             upload_path = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -259,6 +338,9 @@ def search_entities():
             return jsonify({'error': 'CSV文件不存在'}), 404
         
         full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
+        
+        if not full_graph or 'nodes' not in full_graph:
+            return jsonify({'error': '无法加载知识图谱数据'}), 500
         
         # 搜索匹配的实体
         matching_entities = []
@@ -307,6 +389,9 @@ def search_and_navigate():
             return jsonify({'error': 'CSV文件不存在'}), 404
         
         full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
+        
+        if not full_graph or 'nodes' not in full_graph:
+            return jsonify({'error': '无法加载知识图谱数据'}), 500
         
         # 搜索匹配的实体
         matching_entities = []
