@@ -3,7 +3,8 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Search, Download } from 'lucide-react';
+import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Slider } from "@/components/ui/slider";
 
 // API基础URL
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -14,6 +15,8 @@ const KnowledgeGraph = () => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
+  const [maxNodes, setMaxNodes] = useState(100);
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
   const graphRef = useRef();
 
   // 获取图谱数据
@@ -21,7 +24,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/graph`);
+      const response = await fetch(`${API_BASE_URL}/graph?max_nodes=${maxNodes}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -32,10 +35,9 @@ const KnowledgeGraph = () => {
       // 转换数据格式以适配ForceGraph2D
       const formattedData = {
         nodes: data.nodes.map(node => ({
-          id: node.id,
+          ...node,
           name: node.label,
-          type: node.type,
-          color: getNodeColor(node.label)
+          color: getNodeColor(node.label, node.level)
         })),
         links: data.edges.map(edge => ({
           source: edge.source,
@@ -53,14 +55,77 @@ const KnowledgeGraph = () => {
     }
   };
 
-  // 根据节点类型获取颜色
-  const getNodeColor = (label) => {
-    if (label.includes('[疾病]')) return '#ff6b6b';
-    if (label.includes('科室')) return '#4ecdc4';
-    if (label.includes('比例') || label.includes('%')) return '#45b7d1';
-    if (label.includes('人群')) return '#96ceb4';
-    if (label.includes('传播') || label.includes('方式')) return '#feca57';
-    return '#a8e6cf';
+  // 根据节点类型和层级获取颜色
+  const getNodeColor = (label, level) => {
+    if (level === 1) {
+      if (label.includes('[疾病]')) return '#ff6b6b';
+      if (label.includes('科室')) return '#4ecdc4';
+      if (label.includes('比例') || label.includes('%')) return '#45b7d1';
+      if (label.includes('人群')) return '#96ceb4';
+      if (label.includes('传播') || label.includes('方式')) return '#feca57';
+      return '#a8e6cf';
+    }
+    // 二级节点使用较浅的颜色
+    if (label.includes('[疾病]')) return '#ffb3b3';
+    if (label.includes('科室')) return '#b3e6e6';
+    if (label.includes('比例') || label.includes('%')) return '#b3e6ff';
+    if (label.includes('人群')) return '#d9f2e6';
+    if (label.includes('传播') || label.includes('方式')) return '#ffe6b3';
+    return '#e6f2e6';
+  };
+
+  // 展开节点
+  const expandNode = async (nodeId) => {
+    if (expandedNodes.has(nodeId)) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/node/expand?id=${encodeURIComponent(nodeId)}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // 转换新节点和边的格式
+      const newNodes = data.nodes.map(node => ({
+        ...node,
+        name: node.label,
+        color: getNodeColor(node.label, node.level)
+      }));
+      const newLinks = data.edges.map(edge => ({
+        source: edge.source,
+        target: edge.target,
+        label: edge.relation,
+        color: '#999'
+      }));
+
+      // 更新图数据，避免重复
+      const existingNodeIds = new Set(graphData.nodes.map(n => n.id));
+      const existingLinkIds = new Set(graphData.links.map(l => `${l.source}-${l.target}-${l.label}`));
+
+      setGraphData(prev => ({
+        nodes: [
+          ...prev.nodes,
+          ...newNodes.filter(node => !existingNodeIds.has(node.id))
+        ],
+        links: [
+          ...prev.links,
+          ...newLinks.filter(link => 
+            !existingLinkIds.has(`${link.source}-${link.target}-${link.label}`))
+        ]
+      }));
+
+      setExpandedNodes(prev => new Set([...prev, nodeId]));
+    } catch (error) {
+      console.error('展开节点失败:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 处理文件上传
@@ -91,7 +156,7 @@ const KnowledgeGraph = () => {
           id: node.id,
           name: node.label,
           type: node.type,
-          color: getNodeColor(node.label)
+          color: getNodeColor(node.label, node.level)
         })),
         links: data.edges.map(edge => ({
           source: edge.source,
@@ -131,7 +196,7 @@ const KnowledgeGraph = () => {
             ...node,
             color: data.entities.some(entity => entity.id === node.id) 
               ? '#ff4757' 
-              : getNodeColor(node.name)
+              : getNodeColor(node.name, node.level)
           }))
         };
         setGraphData(highlightedData);
@@ -145,11 +210,33 @@ const KnowledgeGraph = () => {
   // 节点点击事件
   const handleNodeClick = (node) => {
     setSelectedNode(node);
+    expandNode(node.id);
     // 聚焦到节点
     if (graphRef.current) {
       graphRef.current.centerAt(node.x, node.y, 1000);
       graphRef.current.zoom(2, 1000);
     }
+  };
+
+  // 缩放控制
+  const handleZoom = (factor) => {
+    if (graphRef.current) {
+      const currentZoom = graphRef.current.zoom();
+      graphRef.current.zoom(currentZoom * factor, 1000);
+    }
+  };
+
+  // 重置视图
+  const resetView = () => {
+    if (graphRef.current) {
+      graphRef.current.zoomToFit(1000);
+    }
+  };
+
+  // 处理最大节点数变化
+  const handleMaxNodesChange = (value) => {
+    setMaxNodes(value[0]);
+    fetchGraphData();
   };
 
   // 导出图谱数据
@@ -188,6 +275,34 @@ const KnowledgeGraph = () => {
               />
               <Button onClick={handleSearch} size="sm">
                 <Search className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* 节点数量控制 */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">显示节点数:</span>
+              <div className="w-32">
+                <Slider
+                  value={[maxNodes]}
+                  min={20}
+                  max={200}
+                  step={20}
+                  onValueChange={handleMaxNodesChange}
+                />
+              </div>
+              <span className="text-sm text-gray-600">{maxNodes}</span>
+            </div>
+
+            {/* 缩放控制 */}
+            <div className="flex items-center space-x-2">
+              <Button onClick={() => handleZoom(0.5)} size="sm" variant="outline">
+                <ZoomOut className="w-4 h-4" />
+              </Button>
+              <Button onClick={() => handleZoom(2)} size="sm" variant="outline">
+                <ZoomIn className="w-4 h-4" />
+              </Button>
+              <Button onClick={resetView} size="sm" variant="outline">
+                <Maximize2 className="w-4 h-4" />
               </Button>
             </div>
 
@@ -244,6 +359,36 @@ const KnowledgeGraph = () => {
             width={window.innerWidth * 0.75}
             height={window.innerHeight - 80}
             backgroundColor="#f8f9fa"
+            nodeCanvasObject={(node, ctx, globalScale) => {
+              const label = node.name;
+              const fontSize = 12/globalScale;
+              ctx.font = `${fontSize}px Sans-Serif`;
+              const textWidth = ctx.measureText(label).width;
+              const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
+
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+              ctx.fillRect(
+                node.x - bckgDimensions[0] / 2,
+                node.y - bckgDimensions[1] / 2,
+                ...bckgDimensions
+              );
+
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = node.color;
+              ctx.fillText(label, node.x, node.y);
+
+              node.__bckgDimensions = bckgDimensions; // to re-use in nodePointerAreaPaint
+            }}
+            nodePointerAreaPaint={(node, color, ctx) => {
+              ctx.fillStyle = color;
+              const bckgDimensions = node.__bckgDimensions;
+              bckgDimensions && ctx.fillRect(
+                node.x - bckgDimensions[0] / 2,
+                node.y - bckgDimensions[1] / 2,
+                ...bckgDimensions
+              );
+            }}
           />
         </div>
 
@@ -265,6 +410,14 @@ const KnowledgeGraph = () => {
                     <p className="text-sm text-gray-800">{selectedNode.type}</p>
                   </div>
                   <div>
+                    <label className="text-sm font-medium text-gray-600">层级</label>
+                    <p className="text-sm text-gray-800">{selectedNode.level === 1 ? '一级节点' : '二级节点'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">连接数</label>
+                    <p className="text-sm text-gray-800">{selectedNode.connections}</p>
+                  </div>
+                  <div>
                     <label className="text-sm font-medium text-gray-600">ID</label>
                     <p className="text-sm text-gray-800">{selectedNode.id}</p>
                   </div>
@@ -274,37 +427,19 @@ const KnowledgeGraph = () => {
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">图谱统计</CardTitle>
+                <CardTitle className="text-lg">使用说明</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">节点数量</span>
-                    <span className="text-sm font-medium">{graphData.nodes.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">关系数量</span>
-                    <span className="text-sm font-medium">{graphData.links.length}</span>
-                  </div>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <p>• 点击节点可以展开相关联的节点</p>
+                  <p>• 使用滑块控制显示的节点数量</p>
+                  <p>• 使用缩放按钮调整视图</p>
+                  <p>• 深色节点为一级节点，浅色节点为二级节点</p>
+                  <p>• 搜索框可以查找特定实体</p>
                 </div>
               </CardContent>
             </Card>
           )}
-
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="text-lg">使用说明</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-gray-600 space-y-2">
-                <p>• 点击节点查看详细信息</p>
-                <p>• 拖拽节点调整位置</p>
-                <p>• 滚轮缩放图谱</p>
-                <p>• 上传CSV文件更新数据</p>
-                <p>• 搜索实体进行高亮显示</p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>
