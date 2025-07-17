@@ -3,7 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw } from 'lucide-react';
+import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw, MapPin, X } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
 
 // API基础URL
@@ -15,6 +15,8 @@ const KnowledgeGraph = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]); // 搜索结果
+  const [showSearchResults, setShowSearchResults] = useState(false); // 是否显示搜索结果列表
   const [selectedNode, setSelectedNode] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -61,7 +63,7 @@ const KnowledgeGraph = () => {
         nodes: data.nodes.map(node => ({
           ...node,
           name: node.label,
-          color: getNodeColor(node.label, node.connections)
+          color: getNodeColor(node.label, node.connections, false, false, node.is_search_result)
         })),
         links: data.edges.map(edge => ({
           source: edge.source,
@@ -78,6 +80,7 @@ const KnowledgeGraph = () => {
       setExpandedNodes(new Set()); // 重置展开状态
       setFocusMode(false); // 重置焦点模式
       setFocusNode(null);
+      setShowSearchResults(false); // 关闭搜索结果列表
     } catch (error) {
       console.error('获取图谱数据失败:', error);
       setError(error.message);
@@ -87,7 +90,12 @@ const KnowledgeGraph = () => {
   };
 
   // 根据节点连接数获取颜色
-  const getNodeColor = (label, connections, isFocus = false, isNeighbor = false) => {
+  const getNodeColor = (label, connections, isFocus = false, isNeighbor = false, isSearchResult = false) => {
+    // 搜索结果特殊颜色
+    if (isSearchResult) {
+      return '#ff4757'; // 红色表示搜索结果
+    }
+    
     // 焦点模式下的特殊颜色
     if (isFocus) {
       return '#ff4757'; // 红色表示焦点节点
@@ -155,6 +163,7 @@ const KnowledgeGraph = () => {
       setGraphData(focusData);
       setFocusMode(true);
       setFocusNode(nodeId);
+      setShowSearchResults(false); // 关闭搜索结果列表
       
       // 聚焦到中心节点
       setTimeout(() => {
@@ -278,6 +287,7 @@ const KnowledgeGraph = () => {
       setCurrentPage(1);
       setFocusMode(false);
       setFocusNode(null);
+      setShowSearchResults(false);
       await fetchGraphInfo();
     } catch (error) {
       console.error('文件上传失败:', error);
@@ -289,11 +299,15 @@ const KnowledgeGraph = () => {
 
   // 搜索实体
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
 
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(searchQuery)}`);
+      const response = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(searchQuery)}&page_size=${pageSize}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -301,27 +315,26 @@ const KnowledgeGraph = () => {
       if (data.error) {
         throw new Error(data.error);
       }
-      if (data.entities.length > 0) {
-        // 高亮搜索结果
-        const currentData = focusMode ? graphData : originalGraphData;
-        const highlightedData = {
-          ...currentData,
-          nodes: currentData.nodes.map(node => ({
-            ...node,
-            color: data.entities.some(entity => entity.id === node.id) 
-              ? '#ff4757' 
-              : getNodeColor(node.name, node.connections, node.id === focusNode, focusMode)
-          }))
-        };
-        setGraphData(highlightedData);
-        if (!focusMode) {
-          setOriginalGraphData(highlightedData);
-        }
-      }
+      
+      setSearchResults(data.entity_pages || []);
+      setShowSearchResults(true);
+      
+      // 显示搜索结果列表，让用户手动选择
     } catch (error) {
       console.error('搜索错误:', error);
       setError(error.message);
     }
+  };
+
+  // 导航到搜索结果并进入焦点模式
+  const navigateToSearchResult = async (entityIndex) => {
+    if (!searchQuery.trim() || entityIndex >= searchResults.length) return;
+
+    const targetEntity = searchResults[entityIndex].entity;
+    setShowSearchResults(false); // 关闭搜索结果列表
+    
+    // 直接进入焦点模式
+    await enterFocusMode(targetEntity.id);
   };
 
   // 节点点击事件
@@ -396,10 +409,10 @@ const KnowledgeGraph = () => {
           
           <div className="flex items-center space-x-4">
             {/* 搜索框 */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 relative">
               <Input
                 type="text"
-                placeholder="搜索实体..."
+                placeholder="搜索实体（支持跨页搜索）..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -408,6 +421,45 @@ const KnowledgeGraph = () => {
               <Button onClick={handleSearch} size="sm">
                 <Search className="w-4 h-4" />
               </Button>
+              
+              {/* 搜索结果下拉列表 */}
+              {showSearchResults && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                  <div className="p-2 border-b bg-gray-50 text-sm font-medium text-gray-700">
+                    找到 {searchResults.length} 个匹配项 (按连接数排序)
+                  </div>
+                  {searchResults.map((result, index) => (
+                    <div
+                      key={index}
+                      className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                      onClick={() => navigateToSearchResult(index)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">{result.entity.label}</div>
+                          <div className="text-sm text-gray-500">
+                            连接数: {result.entity.connections} • 点击进入焦点模式
+                          </div>
+                        </div>
+                        <div className="text-sm text-blue-600 flex items-center">
+                          <Target className="w-3 h-3 mr-1" />
+                          焦点模式
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="p-2 text-center">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setShowSearchResults(false)}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      关闭
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 焦点模式控制 */}
@@ -613,6 +665,12 @@ const KnowledgeGraph = () => {
                     <span className="font-medium">{focusNode}</span>
                   </div>
                 )}
+                {searchResults.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">搜索结果:</span>
+                    <span className="font-medium">{searchResults.length} 个匹配</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -639,7 +697,8 @@ const KnowledgeGraph = () => {
                   <div>
                     <label className="text-sm font-medium text-gray-600">状态</label>
                     <p className="text-sm text-gray-800">
-                      {selectedNode.id === focusNode ? '焦点节点' : 
+                      {selectedNode.is_search_result ? '搜索结果' :
+                       selectedNode.id === focusNode ? '焦点节点' : 
                        focusMode ? '邻居节点' :
                        expandedNodes.has(selectedNode.id) ? '已展开' : '未展开'}
                     </p>
@@ -658,13 +717,13 @@ const KnowledgeGraph = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm text-gray-600">
+                  <p>• <strong>智能搜索</strong>：搜索会查找所有页面，按连接数排序显示结果</p>
+                  <p>• <strong>焦点导航</strong>：点击搜索结果直接进入该节点的焦点模式</p>
                   <p>• <strong>焦点模式</strong>：点击节点进入焦点模式，只显示该节点及其邻居</p>
                   <p>• <strong>退出焦点</strong>：在焦点模式下点击红色按钮或双击焦点节点退出</p>
                   <p>• <strong>切换焦点</strong>：在焦点模式下点击其他节点切换焦点</p>
                   <p>• <strong>分页浏览</strong>：使用分页按钮浏览不同的节点集合</p>
-                  <p>• <strong>调整密度</strong>：调整每页节点数控制显示密度</p>
-                  <p>• <strong>缩放视图</strong>：使用缩放按钮调整视图</p>
-                  <p>• <strong>颜色含义</strong>：红色=焦点节点，灰色=非相关节点</p>
+                  <p>• <strong>颜色含义</strong>：红色=搜索结果/焦点节点，灰色=非相关节点</p>
                 </div>
               </CardContent>
             </Card>

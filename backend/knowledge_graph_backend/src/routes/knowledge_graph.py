@@ -247,11 +247,13 @@ def upload_csv():
 
 @knowledge_graph_bp.route('/search', methods=['GET'])
 def search_entities():
-    """搜索实体"""
+    """搜索实体（支持跨页搜索）"""
     try:
         query = request.args.get('q', '').strip()
+        page_size = int(request.args.get('page_size', 50))
+        
         if not query:
-            return jsonify({'entities': []})
+            return jsonify({'entities': [], 'pages': []})
         
         if not os.path.exists(DEFAULT_CSV_PATH):
             return jsonify({'error': 'CSV文件不存在'}), 404
@@ -264,7 +266,99 @@ def search_entities():
             if query.lower() in node['label'].lower():
                 matching_entities.append(node)
         
-        return jsonify({'entities': matching_entities})
+        # 按连接数从高到低排序搜索结果
+        matching_entities.sort(key=lambda x: x['connections'], reverse=True)
+        
+        # 按连接数排序（与分页逻辑保持一致）
+        sorted_nodes = sorted(full_graph['nodes'], key=lambda x: x['connections'], reverse=True)
+        
+        # 计算每个匹配实体在哪一页
+        entity_pages = []
+        for entity in matching_entities:
+            # 找到该实体在排序列表中的位置
+            for idx, node in enumerate(sorted_nodes):
+                if node['id'] == entity['id']:
+                    page_number = (idx // page_size) + 1
+                    entity_pages.append({
+                        'entity': entity,
+                        'page': page_number,
+                        'position': idx + 1
+                    })
+                    break
+        
+        return jsonify({
+            'entities': matching_entities,
+            'entity_pages': entity_pages,
+            'total_matches': len(matching_entities)
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@knowledge_graph_bp.route('/search/navigate', methods=['GET'])
+def search_and_navigate():
+    """搜索并导航到包含实体的页面"""
+    try:
+        query = request.args.get('q', '').strip()
+        page_size = int(request.args.get('page_size', 50))
+        entity_index = int(request.args.get('entity_index', 0))  # 选择第几个匹配的实体
+        
+        if not query:
+            return jsonify({'error': '搜索查询不能为空'}), 400
+        
+        if not os.path.exists(DEFAULT_CSV_PATH):
+            return jsonify({'error': 'CSV文件不存在'}), 404
+        
+        full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
+        
+        # 搜索匹配的实体
+        matching_entities = []
+        for node in full_graph['nodes']:
+            if query.lower() in node['label'].lower():
+                matching_entities.append(node)
+        
+        if not matching_entities:
+            return jsonify({'error': '未找到匹配的实体'}), 404
+            
+        if entity_index >= len(matching_entities):
+            return jsonify({'error': '实体索引超出范围'}), 400
+        
+        target_entity = matching_entities[entity_index]
+        
+        # 按连接数排序（与分页逻辑保持一致）
+        sorted_nodes = sorted(full_graph['nodes'], key=lambda x: x['connections'], reverse=True)
+        
+        # 找到目标实体在排序列表中的位置
+        target_position = None
+        for idx, node in enumerate(sorted_nodes):
+            if node['id'] == target_entity['id']:
+                target_position = idx
+                break
+        
+        if target_position is None:
+            return jsonify({'error': '无法定位目标实体'}), 404
+        
+        # 计算目标页码
+        target_page = (target_position // page_size) + 1
+        
+        # 获取该页的数据
+        paginated_data = get_paginated_graph(full_graph, target_page, page_size)
+        
+        # 标记搜索结果
+        for node in paginated_data['nodes']:
+            if node['id'] == target_entity['id']:
+                node['is_search_result'] = True
+                break
+        
+        return jsonify({
+            **paginated_data,
+            'search_result': {
+                'entity': target_entity,
+                'page': target_page,
+                'position': target_position + 1,
+                'total_matches': len(matching_entities)
+            }
+        })
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500

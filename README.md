@@ -69,17 +69,15 @@ knowledge_graph_app/
 cd backend/knowledge_graph_backend
 ```
 
-2. 激活虚拟环境：
-```bash
-source venv/bin/activate
-```
+2. 激活虚拟环境
+
 
 3. 安装依赖（如需要）：
 ```bash
 pip install -r requirements.txt
 ```
 
-4. 启动后端服务：
+1. 启动后端服务：
 ```bash
 python src/main.py
 ```
@@ -93,8 +91,9 @@ python src/main.py
 cd frontend/knowledge-graph-frontend
 ```
 
-2. 安装依赖（如需要）：
+2. 安装依赖（如需要，如果无法启动，就删了所有环境重新安装）：
 ```bash
+npm install -g pnpm
 pnpm install
 ```
 
