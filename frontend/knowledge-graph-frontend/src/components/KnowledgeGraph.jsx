@@ -3,7 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
 
 // API基础URL
@@ -11,6 +11,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 const KnowledgeGraph = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const [originalGraphData, setOriginalGraphData] = useState({ nodes: [], links: [] }); // 保存原始数据
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,6 +21,8 @@ const KnowledgeGraph = () => {
   const [pagination, setPagination] = useState({});
   const [graphInfo, setGraphInfo] = useState({});
   const [expandedNodes, setExpandedNodes] = useState(new Set());
+  const [focusMode, setFocusMode] = useState(false); // 焦点模式状态
+  const [focusNode, setFocusNode] = useState(null); // 当前焦点节点
   const graphRef = useRef();
 
   // 获取图谱基本信息
@@ -69,9 +72,12 @@ const KnowledgeGraph = () => {
       };
       
       setGraphData(formattedData);
+      setOriginalGraphData(formattedData); // 保存原始数据
       setPagination(data.pagination);
       setCurrentPage(page);
       setExpandedNodes(new Set()); // 重置展开状态
+      setFocusMode(false); // 重置焦点模式
+      setFocusNode(null);
     } catch (error) {
       console.error('获取图谱数据失败:', error);
       setError(error.message);
@@ -81,7 +87,15 @@ const KnowledgeGraph = () => {
   };
 
   // 根据节点连接数获取颜色
-  const getNodeColor = (label, connections) => {
+  const getNodeColor = (label, connections, isFocus = false, isNeighbor = false) => {
+    // 焦点模式下的特殊颜色
+    if (isFocus) {
+      return '#ff4757'; // 红色表示焦点节点
+    }
+    if (focusMode && !isNeighbor) {
+      return 'rgba(200, 200, 200, 0.3)'; // 灰色表示非相关节点
+    }
+    
     // 根据连接数确定颜色深度
     const intensity = Math.min(connections / 10, 1); // 连接数越多颜色越深
     
@@ -103,9 +117,71 @@ const KnowledgeGraph = () => {
     return `rgba(168, 230, 207, ${0.5 + intensity * 0.5})`;
   };
 
-  // 展开节点
+  // 进入焦点模式
+  const enterFocusMode = async (nodeId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/node/neighbors?id=${encodeURIComponent(nodeId)}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // 转换数据格式
+      const neighborNodeIds = new Set(data.nodes.map(n => n.id));
+      const focusData = {
+        nodes: data.nodes.map(node => ({
+          ...node,
+          name: node.label,
+          color: getNodeColor(
+            node.label, 
+            node.connections, 
+            node.id === nodeId, // 是否为焦点节点
+            true // 都是邻居节点
+          )
+        })),
+        links: data.edges.map(edge => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.relation,
+          color: '#999'
+        }))
+      };
+
+      setGraphData(focusData);
+      setFocusMode(true);
+      setFocusNode(nodeId);
+      
+      // 聚焦到中心节点
+      setTimeout(() => {
+        if (graphRef.current) {
+          graphRef.current.zoomToFit(1000);
+        }
+      }, 100);
+
+    } catch (error) {
+      console.error('进入焦点模式失败:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 退出焦点模式
+  const exitFocusMode = () => {
+    setGraphData(originalGraphData);
+    setFocusMode(false);
+    setFocusNode(null);
+    setSelectedNode(null);
+  };
+
+  // 展开节点（仅在非焦点模式下有效）
   const expandNode = async (nodeId) => {
-    if (expandedNodes.has(nodeId)) return;
+    if (focusMode || expandedNodes.has(nodeId)) return;
     
     setLoading(true);
     setError(null);
@@ -136,18 +212,20 @@ const KnowledgeGraph = () => {
       const existingNodeIds = new Set(graphData.nodes.map(n => n.id));
       const existingLinkIds = new Set(graphData.links.map(l => `${l.source}-${l.target}-${l.label}`));
 
-      setGraphData(prev => ({
+      const updatedData = {
         nodes: [
-          ...prev.nodes,
+          ...graphData.nodes,
           ...newNodes.filter(node => !existingNodeIds.has(node.id))
         ],
         links: [
-          ...prev.links,
+          ...graphData.links,
           ...newLinks.filter(link => 
             !existingLinkIds.has(`${link.source}-${link.target}-${link.label}`))
         ]
-      }));
+      };
 
+      setGraphData(updatedData);
+      setOriginalGraphData(updatedData); // 同时更新原始数据
       setExpandedNodes(prev => new Set([...prev, nodeId]));
     } catch (error) {
       console.error('展开节点失败:', error);
@@ -195,8 +273,11 @@ const KnowledgeGraph = () => {
         }))
       };
       setGraphData(formattedData);
+      setOriginalGraphData(formattedData);
       setPagination(data.pagination);
       setCurrentPage(1);
+      setFocusMode(false);
+      setFocusNode(null);
       await fetchGraphInfo();
     } catch (error) {
       console.error('文件上传失败:', error);
@@ -222,16 +303,20 @@ const KnowledgeGraph = () => {
       }
       if (data.entities.length > 0) {
         // 高亮搜索结果
+        const currentData = focusMode ? graphData : originalGraphData;
         const highlightedData = {
-          ...graphData,
-          nodes: graphData.nodes.map(node => ({
+          ...currentData,
+          nodes: currentData.nodes.map(node => ({
             ...node,
             color: data.entities.some(entity => entity.id === node.id) 
               ? '#ff4757' 
-              : getNodeColor(node.name, node.connections)
+              : getNodeColor(node.name, node.connections, node.id === focusNode, focusMode)
           }))
         };
         setGraphData(highlightedData);
+        if (!focusMode) {
+          setOriginalGraphData(highlightedData);
+        }
       }
     } catch (error) {
       console.error('搜索错误:', error);
@@ -242,11 +327,17 @@ const KnowledgeGraph = () => {
   // 节点点击事件
   const handleNodeClick = (node) => {
     setSelectedNode(node);
-    expandNode(node.id);
-    // 聚焦到节点
-    if (graphRef.current) {
-      graphRef.current.centerAt(node.x, node.y, 1000);
-      graphRef.current.zoom(2, 1000);
+    
+    if (focusMode) {
+      // 在焦点模式下，双击可以切换焦点
+      if (node.id === focusNode) {
+        exitFocusMode();
+      } else {
+        enterFocusMode(node.id);
+      }
+    } else {
+      // 在普通模式下，单击进入焦点模式
+      enterFocusMode(node.id);
     }
   };
 
@@ -319,43 +410,57 @@ const KnowledgeGraph = () => {
               </Button>
             </div>
 
-            {/* 页面大小控制 */}
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">每页节点数:</span>
-              <div className="w-32">
-                <Slider
-                  value={[pageSize]}
-                  min={20}
-                  max={100}
-                  step={10}
-                  onValueChange={handlePageSizeChange}
-                />
+            {/* 焦点模式控制 */}
+            {focusMode && (
+              <div className="flex items-center space-x-2">
+                <Button onClick={exitFocusMode} size="sm" variant="outline">
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  退出焦点模式
+                </Button>
               </div>
-              <span className="text-sm text-gray-600">{pageSize}</span>
-            </div>
+            )}
 
-            {/* 分页控制 */}
-            <div className="flex items-center space-x-2">
-              <Button 
-                onClick={() => goToPage(currentPage - 1)} 
-                size="sm" 
-                variant="outline"
-                disabled={currentPage <= 1}
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="text-sm text-gray-600">
-                {currentPage} / {pagination.total_pages || 1}
-              </span>
-              <Button 
-                onClick={() => goToPage(currentPage + 1)} 
-                size="sm" 
-                variant="outline"
-                disabled={currentPage >= (pagination.total_pages || 1)}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
+            {/* 页面大小控制（仅在非焦点模式下显示） */}
+            {!focusMode && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">每页节点数:</span>
+                <div className="w-32">
+                  <Slider
+                    value={[pageSize]}
+                    min={20}
+                    max={100}
+                    step={10}
+                    onValueChange={handlePageSizeChange}
+                  />
+                </div>
+                <span className="text-sm text-gray-600">{pageSize}</span>
+              </div>
+            )}
+
+            {/* 分页控制（仅在非焦点模式下显示） */}
+            {!focusMode && (
+              <div className="flex items-center space-x-2">
+                <Button 
+                  onClick={() => goToPage(currentPage - 1)} 
+                  size="sm" 
+                  variant="outline"
+                  disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm text-gray-600">
+                  {currentPage} / {pagination.total_pages || 1}
+                </span>
+                <Button 
+                  onClick={() => goToPage(currentPage + 1)} 
+                  size="sm" 
+                  variant="outline"
+                  disabled={currentPage >= (pagination.total_pages || 1)}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
 
             {/* 缩放控制 */}
             <div className="flex items-center space-x-2">
@@ -398,6 +503,16 @@ const KnowledgeGraph = () => {
         {error && (
           <div className="absolute top-20 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
             <p>{error}</p>
+          </div>
+        )}
+
+        {/* 焦点模式提示 */}
+        {focusMode && (
+          <div className="absolute top-20 left-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded z-50">
+            <div className="flex items-center">
+              <Target className="w-4 h-4 mr-2" />
+              <span>焦点模式：显示节点 "{focusNode}" 及其邻居</span>
+            </div>
           </div>
         )}
 
@@ -463,27 +578,41 @@ const KnowledgeGraph = () => {
             <CardHeader>
               <CardTitle className="text-lg flex items-center">
                 <Info className="w-5 h-5 mr-2" />
-                图谱统计
+                {focusMode ? '焦点模式统计' : '图谱统计'}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">总节点数:</span>
-                  <span className="font-medium">{graphInfo.total_nodes || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">总边数:</span>
-                  <span className="font-medium">{graphInfo.total_edges || 0}</span>
-                </div>
+                {!focusMode && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">总节点数:</span>
+                      <span className="font-medium">{graphInfo.total_nodes || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">总边数:</span>
+                      <span className="font-medium">{graphInfo.total_edges || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">当前页:</span>
+                      <span className="font-medium">{currentPage} / {pagination.total_pages || 1}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">当前显示:</span>
                   <span className="font-medium">{graphData.nodes.length} 节点</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">当前页:</span>
-                  <span className="font-medium">{currentPage} / {pagination.total_pages || 1}</span>
+                  <span className="text-gray-600">当前边数:</span>
+                  <span className="font-medium">{graphData.links.length}</span>
                 </div>
+                {focusMode && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">焦点节点:</span>
+                    <span className="font-medium">{focusNode}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -510,7 +639,9 @@ const KnowledgeGraph = () => {
                   <div>
                     <label className="text-sm font-medium text-gray-600">状态</label>
                     <p className="text-sm text-gray-800">
-                      {expandedNodes.has(selectedNode.id) ? '已展开' : '未展开'}
+                      {selectedNode.id === focusNode ? '焦点节点' : 
+                       focusMode ? '邻居节点' :
+                       expandedNodes.has(selectedNode.id) ? '已展开' : '未展开'}
                     </p>
                   </div>
                   <div>
@@ -527,12 +658,13 @@ const KnowledgeGraph = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm text-gray-600">
-                  <p>• 使用分页按钮浏览不同的节点集合</p>
-                  <p>• 调整每页节点数控制显示密度</p>
-                  <p>• 点击节点可以展开相关联的节点</p>
-                  <p>• 使用缩放按钮调整视图</p>
-                  <p>• 节点颜色深度表示连接重要程度</p>
-                  <p>• 搜索框可以查找特定实体</p>
+                  <p>• <strong>焦点模式</strong>：点击节点进入焦点模式，只显示该节点及其邻居</p>
+                  <p>• <strong>退出焦点</strong>：在焦点模式下点击红色按钮或双击焦点节点退出</p>
+                  <p>• <strong>切换焦点</strong>：在焦点模式下点击其他节点切换焦点</p>
+                  <p>• <strong>分页浏览</strong>：使用分页按钮浏览不同的节点集合</p>
+                  <p>• <strong>调整密度</strong>：调整每页节点数控制显示密度</p>
+                  <p>• <strong>缩放视图</strong>：使用缩放按钮调整视图</p>
+                  <p>• <strong>颜色含义</strong>：红色=焦点节点，灰色=非相关节点</p>
                 </div>
               </CardContent>
             </Card>

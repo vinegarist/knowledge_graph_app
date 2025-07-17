@@ -174,6 +174,48 @@ def expand_node():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@knowledge_graph_bp.route('/node/neighbors', methods=['GET'])
+def get_node_neighbors():
+    """获取指定节点及其直接邻居节点"""
+    try:
+        node_id = request.args.get('id')
+        if not node_id:
+            return jsonify({'error': '未指定节点ID'}), 400
+            
+        if not os.path.exists(DEFAULT_CSV_PATH):
+            return jsonify({'error': 'CSV文件不存在'}), 404
+            
+        full_graph = parse_csv_to_full_graph(DEFAULT_CSV_PATH)
+        
+        # 找出与指定节点直接相连的所有节点和边
+        neighbor_node_ids = {node_id}  # 包含目标节点本身
+        neighbor_edges = []
+        
+        # 查找所有相关的边
+        for edge in full_graph['edges']:
+            if edge['source'] == node_id:
+                neighbor_edges.append(edge)
+                neighbor_node_ids.add(edge['target'])
+            elif edge['target'] == node_id:
+                neighbor_edges.append(edge)
+                neighbor_node_ids.add(edge['source'])
+        
+        # 获取所有相关节点
+        neighbor_nodes = [
+            node for node in full_graph['nodes']
+            if node['id'] in neighbor_node_ids
+        ]
+        
+        return jsonify({
+            'nodes': neighbor_nodes,
+            'edges': neighbor_edges,
+            'center_node': node_id,
+            'neighbor_count': len(neighbor_nodes) - 1  # 减去中心节点本身
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @knowledge_graph_bp.route('/upload', methods=['POST'])
 def upload_csv():
     """上传CSV文件"""
