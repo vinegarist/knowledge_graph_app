@@ -3,7 +3,7 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
 
 // API基础URL
@@ -15,16 +15,17 @@ const KnowledgeGraph = () => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
-  const [maxNodes, setMaxNodes] = useState(100);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [pagination, setPagination] = useState({});
+  const [graphInfo, setGraphInfo] = useState({});
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const graphRef = useRef();
 
-  // 获取图谱数据
-  const fetchGraphData = async () => {
-    setLoading(true);
-    setError(null);
+  // 获取图谱基本信息
+  const fetchGraphInfo = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/graph?max_nodes=${maxNodes}`);
+      const response = await fetch(`${API_BASE_URL}/graph/info`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -32,12 +33,32 @@ const KnowledgeGraph = () => {
       if (data.error) {
         throw new Error(data.error);
       }
+      setGraphInfo(data);
+    } catch (error) {
+      console.error('获取图谱信息失败:', error);
+    }
+  };
+
+  // 获取图谱数据
+  const fetchGraphData = async (page = currentPage, size = pageSize) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/graph?page=${page}&page_size=${size}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
       // 转换数据格式以适配ForceGraph2D
       const formattedData = {
         nodes: data.nodes.map(node => ({
           ...node,
           name: node.label,
-          color: getNodeColor(node.label, node.level)
+          color: getNodeColor(node.label, node.connections)
         })),
         links: data.edges.map(edge => ({
           source: edge.source,
@@ -46,7 +67,11 @@ const KnowledgeGraph = () => {
           color: '#999'
         }))
       };
+      
       setGraphData(formattedData);
+      setPagination(data.pagination);
+      setCurrentPage(page);
+      setExpandedNodes(new Set()); // 重置展开状态
     } catch (error) {
       console.error('获取图谱数据失败:', error);
       setError(error.message);
@@ -55,23 +80,27 @@ const KnowledgeGraph = () => {
     }
   };
 
-  // 根据节点类型和层级获取颜色
-  const getNodeColor = (label, level) => {
-    if (level === 1) {
-      if (label.includes('[疾病]')) return '#ff6b6b';
-      if (label.includes('科室')) return '#4ecdc4';
-      if (label.includes('比例') || label.includes('%')) return '#45b7d1';
-      if (label.includes('人群')) return '#96ceb4';
-      if (label.includes('传播') || label.includes('方式')) return '#feca57';
-      return '#a8e6cf';
+  // 根据节点连接数获取颜色
+  const getNodeColor = (label, connections) => {
+    // 根据连接数确定颜色深度
+    const intensity = Math.min(connections / 10, 1); // 连接数越多颜色越深
+    
+    if (label.includes('[疾病]')) {
+      return `rgba(255, 107, 107, ${0.5 + intensity * 0.5})`;
     }
-    // 二级节点使用较浅的颜色
-    if (label.includes('[疾病]')) return '#ffb3b3';
-    if (label.includes('科室')) return '#b3e6e6';
-    if (label.includes('比例') || label.includes('%')) return '#b3e6ff';
-    if (label.includes('人群')) return '#d9f2e6';
-    if (label.includes('传播') || label.includes('方式')) return '#ffe6b3';
-    return '#e6f2e6';
+    if (label.includes('科室')) {
+      return `rgba(78, 205, 196, ${0.5 + intensity * 0.5})`;
+    }
+    if (label.includes('比例') || label.includes('%')) {
+      return `rgba(69, 183, 209, ${0.5 + intensity * 0.5})`;
+    }
+    if (label.includes('人群')) {
+      return `rgba(150, 206, 180, ${0.5 + intensity * 0.5})`;
+    }
+    if (label.includes('传播') || label.includes('方式')) {
+      return `rgba(254, 202, 87, ${0.5 + intensity * 0.5})`;
+    }
+    return `rgba(168, 230, 207, ${0.5 + intensity * 0.5})`;
   };
 
   // 展开节点
@@ -94,7 +123,7 @@ const KnowledgeGraph = () => {
       const newNodes = data.nodes.map(node => ({
         ...node,
         name: node.label,
-        color: getNodeColor(node.label, node.level)
+        color: getNodeColor(node.label, node.connections)
       }));
       const newLinks = data.edges.map(edge => ({
         source: edge.source,
@@ -151,12 +180,12 @@ const KnowledgeGraph = () => {
       if (data.error) {
         throw new Error(data.error);
       }
+      
       const formattedData = {
         nodes: data.nodes.map(node => ({
-          id: node.id,
+          ...node,
           name: node.label,
-          type: node.type,
-          color: getNodeColor(node.label, node.level)
+          color: getNodeColor(node.label, node.connections)
         })),
         links: data.edges.map(edge => ({
           source: edge.source,
@@ -166,6 +195,9 @@ const KnowledgeGraph = () => {
         }))
       };
       setGraphData(formattedData);
+      setPagination(data.pagination);
+      setCurrentPage(1);
+      await fetchGraphInfo();
     } catch (error) {
       console.error('文件上传失败:', error);
       setError(error.message);
@@ -196,7 +228,7 @@ const KnowledgeGraph = () => {
             ...node,
             color: data.entities.some(entity => entity.id === node.id) 
               ? '#ff4757' 
-              : getNodeColor(node.name, node.level)
+              : getNodeColor(node.name, node.connections)
           }))
         };
         setGraphData(highlightedData);
@@ -233,10 +265,18 @@ const KnowledgeGraph = () => {
     }
   };
 
-  // 处理最大节点数变化
-  const handleMaxNodesChange = (value) => {
-    setMaxNodes(value[0]);
-    fetchGraphData();
+  // 分页控制
+  const goToPage = (page) => {
+    if (page >= 1 && page <= pagination.total_pages) {
+      fetchGraphData(page, pageSize);
+    }
+  };
+
+  // 改变页面大小
+  const handlePageSizeChange = (value) => {
+    const newSize = value[0];
+    setPageSize(newSize);
+    fetchGraphData(1, newSize);
   };
 
   // 导出图谱数据
@@ -252,6 +292,7 @@ const KnowledgeGraph = () => {
   };
 
   useEffect(() => {
+    fetchGraphInfo();
     fetchGraphData();
   }, []);
 
@@ -278,19 +319,42 @@ const KnowledgeGraph = () => {
               </Button>
             </div>
 
-            {/* 节点数量控制 */}
+            {/* 页面大小控制 */}
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">显示节点数:</span>
+              <span className="text-sm text-gray-600">每页节点数:</span>
               <div className="w-32">
                 <Slider
-                  value={[maxNodes]}
+                  value={[pageSize]}
                   min={20}
-                  max={200}
-                  step={20}
-                  onValueChange={handleMaxNodesChange}
+                  max={100}
+                  step={10}
+                  onValueChange={handlePageSizeChange}
                 />
               </div>
-              <span className="text-sm text-gray-600">{maxNodes}</span>
+              <span className="text-sm text-gray-600">{pageSize}</span>
+            </div>
+
+            {/* 分页控制 */}
+            <div className="flex items-center space-x-2">
+              <Button 
+                onClick={() => goToPage(currentPage - 1)} 
+                size="sm" 
+                variant="outline"
+                disabled={currentPage <= 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm text-gray-600">
+                {currentPage} / {pagination.total_pages || 1}
+              </span>
+              <Button 
+                onClick={() => goToPage(currentPage + 1)} 
+                size="sm" 
+                variant="outline"
+                disabled={currentPage >= (pagination.total_pages || 1)}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
 
             {/* 缩放控制 */}
@@ -394,6 +458,36 @@ const KnowledgeGraph = () => {
 
         {/* 侧边栏 */}
         <div className="w-80 bg-white border-l p-4 overflow-y-auto">
+          {/* 图谱统计信息 */}
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <Info className="w-5 h-5 mr-2" />
+                图谱统计
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">总节点数:</span>
+                  <span className="font-medium">{graphInfo.total_nodes || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">总边数:</span>
+                  <span className="font-medium">{graphInfo.total_edges || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">当前显示:</span>
+                  <span className="font-medium">{graphData.nodes.length} 节点</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">当前页:</span>
+                  <span className="font-medium">{currentPage} / {pagination.total_pages || 1}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {selectedNode ? (
             <Card>
               <CardHeader>
@@ -410,12 +504,14 @@ const KnowledgeGraph = () => {
                     <p className="text-sm text-gray-800">{selectedNode.type}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-600">层级</label>
-                    <p className="text-sm text-gray-800">{selectedNode.level === 1 ? '一级节点' : '二级节点'}</p>
-                  </div>
-                  <div>
                     <label className="text-sm font-medium text-gray-600">连接数</label>
                     <p className="text-sm text-gray-800">{selectedNode.connections}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-600">状态</label>
+                    <p className="text-sm text-gray-800">
+                      {expandedNodes.has(selectedNode.id) ? '已展开' : '未展开'}
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-600">ID</label>
@@ -431,10 +527,11 @@ const KnowledgeGraph = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm text-gray-600">
+                  <p>• 使用分页按钮浏览不同的节点集合</p>
+                  <p>• 调整每页节点数控制显示密度</p>
                   <p>• 点击节点可以展开相关联的节点</p>
-                  <p>• 使用滑块控制显示的节点数量</p>
                   <p>• 使用缩放按钮调整视图</p>
-                  <p>• 深色节点为一级节点，浅色节点为二级节点</p>
+                  <p>• 节点颜色深度表示连接重要程度</p>
                   <p>• 搜索框可以查找特定实体</p>
                 </div>
               </CardContent>
