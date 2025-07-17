@@ -320,8 +320,11 @@ const KnowledgeGraph = () => {
         throw new Error(data.error);
       }
       
-      // 按连接数排序搜索结果
-      const sortedResults = (data.entity_pages || []).sort((a, b) => {
+      // 按连接数排序搜索结果，同时保存原始索引
+      const sortedResults = (data.entity_pages || []).map((item, originalIndex) => ({
+        ...item,
+        originalIndex // 保存原始索引
+      })).sort((a, b) => {
         return (b.entity.connections || 0) - (a.entity.connections || 0);
       });
       
@@ -620,7 +623,7 @@ const KnowledgeGraph = () => {
                             className="text-xs h-6 px-2"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigateToSearchResult(index);
+                              navigateToSearchResult(result.originalIndex);
                             }}
                             title="跳转到页面"
                           >
