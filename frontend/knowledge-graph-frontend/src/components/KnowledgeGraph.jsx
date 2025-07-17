@@ -3,8 +3,10 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw, MapPin, X } from 'lucide-react';
+import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw, MapPin, X, Bot, MessageSquare } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AIAssistant from './AIAssistant';
 
 // API基础URL
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -25,6 +27,8 @@ const KnowledgeGraph = () => {
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [focusMode, setFocusMode] = useState(false); // 焦点模式状态
   const [focusNode, setFocusNode] = useState(null); // 当前焦点节点
+  const [showAI, setShowAI] = useState(false); // 是否显示AI助手
+  const [activeTab, setActiveTab] = useState('graph'); // 当前活动标签页
   const graphRef = useRef();
 
   // 获取图谱基本信息
@@ -53,27 +57,27 @@ const KnowledgeGraph = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
+        const data = await response.json();
       if (data.error) {
         throw new Error(data.error);
       }
       
-      // 转换数据格式以适配ForceGraph2D
-      const formattedData = {
-        nodes: data.nodes.map(node => ({
+        // 转换数据格式以适配ForceGraph2D
+        const formattedData = {
+          nodes: data.nodes.map(node => ({
           ...node,
-          name: node.label,
+            name: node.label,
           color: getNodeColor(node.label, node.connections, false, false, node.is_search_result)
-        })),
-        links: data.edges.map(edge => ({
-          source: edge.source,
-          target: edge.target,
-          label: edge.relation,
-          color: '#999'
-        }))
-      };
+          })),
+          links: data.edges.map(edge => ({
+            source: edge.source,
+            target: edge.target,
+            label: edge.relation,
+            color: '#999'
+          }))
+        };
       
-      setGraphData(formattedData);
+        setGraphData(formattedData);
       setOriginalGraphData(formattedData); // 保存原始数据
       setPagination(data.pagination);
       setCurrentPage(page);
@@ -263,25 +267,25 @@ const KnowledgeGraph = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
+        const data = await response.json();
       if (data.error) {
         throw new Error(data.error);
       }
       
-      const formattedData = {
-        nodes: data.nodes.map(node => ({
+        const formattedData = {
+          nodes: data.nodes.map(node => ({
           ...node,
-          name: node.label,
+            name: node.label,
           color: getNodeColor(node.label, node.connections)
-        })),
-        links: data.edges.map(edge => ({
-          source: edge.source,
-          target: edge.target,
-          label: edge.relation,
-          color: '#999'
-        }))
-      };
-      setGraphData(formattedData);
+          })),
+          links: data.edges.map(edge => ({
+            source: edge.source,
+            target: edge.target,
+            label: edge.relation,
+            color: '#999'
+          }))
+        };
+        setGraphData(formattedData);
       setOriginalGraphData(formattedData);
       setPagination(data.pagination);
       setCurrentPage(1);
@@ -316,25 +320,135 @@ const KnowledgeGraph = () => {
         throw new Error(data.error);
       }
       
-      setSearchResults(data.entity_pages || []);
+      // 按连接数排序搜索结果
+      const sortedResults = (data.entity_pages || []).sort((a, b) => {
+        return (b.entity.connections || 0) - (a.entity.connections || 0);
+      });
+      
+      setSearchResults(sortedResults);
       setShowSearchResults(true);
       
-      // 显示搜索结果列表，让用户手动选择
+      // 不再自动导航，让用户选择操作
     } catch (error) {
       console.error('搜索错误:', error);
       setError(error.message);
     }
   };
 
-  // 导航到搜索结果并进入焦点模式
+  // 导航到搜索结果（跳转到页面）
   const navigateToSearchResult = async (entityIndex) => {
-    if (!searchQuery.trim() || entityIndex >= searchResults.length) return;
+    if (!searchQuery.trim()) return;
 
-    const targetEntity = searchResults[entityIndex].entity;
-    setShowSearchResults(false); // 关闭搜索结果列表
-    
-    // 直接进入焦点模式
-    await enterFocusMode(targetEntity.id);
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/search/navigate?q=${encodeURIComponent(searchQuery)}&page_size=${pageSize}&entity_index=${entityIndex}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // 转换数据格式
+      const formattedData = {
+        nodes: data.nodes.map(node => ({
+          ...node,
+          name: node.label,
+          color: getNodeColor(node.label, node.connections, false, false, node.is_search_result)
+        })),
+        links: data.edges.map(edge => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.relation,
+          color: '#999'
+        }))
+      };
+
+      setGraphData(formattedData);
+      setOriginalGraphData(formattedData);
+      setPagination(data.pagination);
+      setCurrentPage(data.search_result.page);
+      setFocusMode(false);
+      setFocusNode(null);
+      setShowSearchResults(false);
+
+      // 找到搜索结果节点并选中它
+      const searchResultNode = formattedData.nodes.find(node => node.is_search_result);
+      if (searchResultNode) {
+        setSelectedNode(searchResultNode);
+        // 聚焦到搜索结果节点
+        setTimeout(() => {
+          if (graphRef.current) {
+            graphRef.current.zoomToFit(1000);
+          }
+        }, 100);
+      }
+
+    } catch (error) {
+      console.error('导航到搜索结果失败:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 进入焦点模式（基于搜索结果）
+  const enterFocusModeFromSearch = async (entityId, entityLabel) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/node/neighbors?id=${encodeURIComponent(entityId)}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // 转换焦点模式数据格式
+      const formattedData = {
+        nodes: data.nodes.map(node => ({
+          ...node,
+          name: node.label,
+          color: getNodeColor(
+            node.label, 
+            node.connections, 
+            node.id === entityId, // 是否为焦点节点
+            true // 都是邻居节点
+          )
+        })),
+        links: data.edges.map(edge => ({
+          source: edge.source,
+          target: edge.target,
+          label: edge.relation,
+          color: '#999'
+        }))
+      };
+
+      setGraphData(formattedData);
+      setFocusMode(true);
+      setFocusNode(entityLabel || entityId);
+      setShowSearchResults(false);
+      
+      // 如果图谱引用存在，聚焦到目标节点
+      if (graphRef.current) {
+        const targetNode = formattedData.nodes.find(n => n.id === entityId);
+        if (targetNode) {
+          setTimeout(() => {
+            graphRef.current.centerAt(targetNode.x, targetNode.y, 1000);
+            graphRef.current.zoom(3, 1000);
+          }, 100);
+        }
+      }
+    } catch (error) {
+      console.error('进入焦点模式失败:', error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 节点点击事件
@@ -400,50 +514,119 @@ const KnowledgeGraph = () => {
     fetchGraphData();
   }, []);
 
+  // AI助手回调函数
+  const handleEntityFocus = (entityId) => {
+    const node = graphData.nodes.find(n => n.id === entityId);
+    if (node && graphRef.current) {
+      setFocusNode(entityId);
+      setFocusMode(true);
+      focusOnNode(node);
+      setActiveTab('graph'); // 切换到图谱视图
+    }
+  };
+
+  const handleEntitySearch = (entityLabel) => {
+    setSearchQuery(entityLabel);
+    handleSearch();
+    setActiveTab('graph'); // 切换到图谱视图
+  };
+
   return (
     <div className="w-full h-screen bg-gray-50">
       {/* 顶部工具栏 */}
       <div className="bg-white shadow-sm border-b p-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-800">知识图谱可视化</h1>
+          <h1 className="text-2xl font-bold text-gray-800">知识图谱可视化系统</h1>
           
-          <div className="flex items-center space-x-4">
-            {/* 搜索框 */}
-            <div className="flex items-center space-x-2 relative">
-              <Input
-                type="text"
-                placeholder="搜索实体（支持跨页搜索）..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-64"
-              />
-              <Button onClick={handleSearch} size="sm">
-                <Search className="w-4 h-4" />
-              </Button>
+          {/* 切换按钮 */}
+          <div className="flex items-center space-x-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+              <TabsList>
+                <TabsTrigger value="graph" className="flex items-center space-x-2">
+                  <MapPin className="w-4 h-4" />
+                  <span>知识图谱</span>
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="flex items-center space-x-2">
+                  <Bot className="w-4 h-4" />
+                  <span>AI助手</span>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+      </div>
+
+      {/* 主要内容区域 */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+        <TabsContent value="graph" className="flex-1 m-0">
+          <div className="flex h-full">
+            {/* 图谱控制面板 */}
+            <div className="bg-white shadow-sm border-r p-4 w-96">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">图谱控制</h2>
+          
+                        {/* 搜索框 */}
+              <div className="flex items-center space-x-2 relative mb-4">
+                <Input
+                  type="text"
+                  placeholder="搜索实体..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="w-full"
+                />
+                <Button onClick={handleSearch} size="sm">
+                  <Search className="w-4 h-4" />
+                </Button>
               
               {/* 搜索结果下拉列表 */}
               {showSearchResults && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto min-w-full w-auto max-w-md">
                   <div className="p-2 border-b bg-gray-50 text-sm font-medium text-gray-700">
-                    找到 {searchResults.length} 个匹配项 (按连接数排序)
+                    找到 {searchResults.length} 个匹配项（按连接数排序）
                   </div>
                   {searchResults.map((result, index) => (
                     <div
                       key={index}
-                      className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
-                      onClick={() => navigateToSearchResult(index)}
+                      className="p-3 border-b border-gray-100 hover:bg-gray-50"
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-gray-900">{result.entity.label}</div>
-                          <div className="text-sm text-gray-500">
-                            连接数: {result.entity.connections} • 点击进入焦点模式
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0 pr-2">
+                          <div className="font-medium text-gray-900 break-words">{result.entity.label}</div>
+                          <div className="text-sm text-gray-500 flex items-center space-x-3">
+                            <span>连接数: {result.entity.connections}</span>
+                            <span className="flex items-center">
+                              <MapPin className="w-3 h-3 mr-1" />
+                              第 {result.page} 页
+                            </span>
                           </div>
                         </div>
-                        <div className="text-sm text-blue-600 flex items-center">
-                          <Target className="w-3 h-3 mr-1" />
-                          焦点模式
+                        <div className="flex flex-col space-y-1 ml-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-6 px-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              enterFocusModeFromSearch(result.entity.id, result.entity.label);
+                            }}
+                            title="进入焦点模式"
+                          >
+                            <Target className="w-3 h-3 mr-1" />
+                            聚焦
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-6 px-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigateToSearchResult(index);
+                            }}
+                            title="跳转到页面"
+                          >
+                            <MapPin className="w-3 h-3 mr-1" />
+                            跳转
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -460,116 +643,117 @@ const KnowledgeGraph = () => {
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* 焦点模式控制 */}
-            {focusMode && (
-              <div className="flex items-center space-x-2">
-                <Button onClick={exitFocusMode} size="sm" variant="outline">
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  退出焦点模式
-                </Button>
               </div>
-            )}
 
-            {/* 页面大小控制（仅在非焦点模式下显示） */}
-            {!focusMode && (
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-600">每页节点数:</span>
-                <div className="w-32">
+              {/* 焦点模式控制 */}
+              {focusMode && (
+                <div className="mb-4">
+                  <Button onClick={exitFocusMode} size="sm" variant="outline" className="w-full">
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    退出焦点模式
+                  </Button>
+                </div>
+              )}
+
+              {/* 页面大小控制（仅在非焦点模式下显示） */}
+              {!focusMode && (
+                <div className="mb-4">
+                  <label className="text-sm text-gray-600 block mb-2">每页节点数: {pageSize}</label>
                   <Slider
                     value={[pageSize]}
                     min={20}
                     max={100}
                     step={10}
                     onValueChange={handlePageSizeChange}
+                    className="w-full"
                   />
                 </div>
-                <span className="text-sm text-gray-600">{pageSize}</span>
+              )}
+
+              {/* 分页控制（仅在非焦点模式下显示） */}
+              {!focusMode && (
+                <div className="mb-4">
+                  <label className="text-sm text-gray-600 block mb-2">页面导航</label>
+                  <div className="flex items-center justify-between">
+                    <Button 
+                      onClick={() => goToPage(currentPage - 1)} 
+                      size="sm" 
+                      variant="outline"
+                      disabled={currentPage <= 1}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      {currentPage} / {pagination.total_pages || 1}
+                    </span>
+                    <Button 
+                      onClick={() => goToPage(currentPage + 1)} 
+                      size="sm" 
+                      variant="outline"
+                      disabled={currentPage >= (pagination.total_pages || 1)}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* 缩放控制 */}
+              <div className="mb-4">
+                <label className="text-sm text-gray-600 block mb-2">视图控制</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button onClick={() => handleZoom(0.5)} size="sm" variant="outline">
+                    <ZoomOut className="w-4 h-4" />
+                  </Button>
+                  <Button onClick={() => handleZoom(2)} size="sm" variant="outline">
+                    <ZoomIn className="w-4 h-4" />
+                  </Button>
+                  <Button onClick={resetView} size="sm" variant="outline">
+                    <Maximize2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-            )}
 
-            {/* 分页控制（仅在非焦点模式下显示） */}
-            {!focusMode && (
-              <div className="flex items-center space-x-2">
-                <Button 
-                  onClick={() => goToPage(currentPage - 1)} 
-                  size="sm" 
-                  variant="outline"
-                  disabled={currentPage <= 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-sm text-gray-600">
-                  {currentPage} / {pagination.total_pages || 1}
-                </span>
-                <Button 
-                  onClick={() => goToPage(currentPage + 1)} 
-                  size="sm" 
-                  variant="outline"
-                  disabled={currentPage >= (pagination.total_pages || 1)}
-                >
-                  <ChevronRight className="w-4 h-4" />
+              {/* 文件上传 */}
+              <div className="mb-4">
+                <label className="text-sm text-gray-600 block mb-2">数据管理</label>
+                <div className="relative mb-2">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <Button variant="outline" size="sm" className="w-full">
+                    <Upload className="w-4 h-4 mr-2" />
+                    上传CSV
+                  </Button>
+                </div>
+                <Button onClick={exportData} variant="outline" size="sm" className="w-full">
+                  <Download className="w-4 h-4 mr-2" />
+                  导出数据
                 </Button>
               </div>
-            )}
-
-            {/* 缩放控制 */}
-            <div className="flex items-center space-x-2">
-              <Button onClick={() => handleZoom(0.5)} size="sm" variant="outline">
-                <ZoomOut className="w-4 h-4" />
-              </Button>
-              <Button onClick={() => handleZoom(2)} size="sm" variant="outline">
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-              <Button onClick={resetView} size="sm" variant="outline">
-                <Maximize2 className="w-4 h-4" />
-              </Button>
             </div>
 
-            {/* 文件上传 */}
-            <div className="relative">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <Button variant="outline" size="sm">
-                <Upload className="w-4 h-4 mr-2" />
-                上传CSV
-              </Button>
-            </div>
+            {/* 主图谱区域 */}
+            <div className="flex-1 relative">
+              {/* 错误提示 */}
+              {error && (
+                <div className="absolute top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
+                  <p>{error}</p>
+                </div>
+              )}
 
-            {/* 导出数据 */}
-            <Button onClick={exportData} variant="outline" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              导出
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex h-full">
-        {/* 错误提示 */}
-        {error && (
-          <div className="absolute top-20 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
-            <p>{error}</p>
-          </div>
-        )}
-
-        {/* 焦点模式提示 */}
-        {focusMode && (
-          <div className="absolute top-20 left-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded z-50">
-            <div className="flex items-center">
-              <Target className="w-4 h-4 mr-2" />
-              <span>焦点模式：显示节点 "{focusNode}" 及其邻居</span>
-            </div>
-          </div>
-        )}
-
-        {/* 主图谱区域 */}
-        <div className="flex-1 relative">
+              {/* 焦点模式提示 */}
+              {focusMode && (
+                <div className="absolute top-4 left-4 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded z-50">
+                  <div className="flex items-center">
+                    <Target className="w-4 h-4 mr-2" />
+                    <span>焦点模式：显示节点 "{focusNode}" 及其邻居</span>
+                  </div>
+                </div>
+              )}
           {loading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
               <div className="text-lg">加载中...</div>
@@ -717,8 +901,8 @@ const KnowledgeGraph = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 text-sm text-gray-600">
-                  <p>• <strong>智能搜索</strong>：搜索会查找所有页面，按连接数排序显示结果</p>
-                  <p>• <strong>焦点导航</strong>：点击搜索结果直接进入该节点的焦点模式</p>
+                  <p>• <strong>智能搜索</strong>：搜索会查找所有页面，显示结果列表和所在页码</p>
+                  <p>• <strong>快速导航</strong>：点击搜索结果可直接跳转到对应页面</p>
                   <p>• <strong>焦点模式</strong>：点击节点进入焦点模式，只显示该节点及其邻居</p>
                   <p>• <strong>退出焦点</strong>：在焦点模式下点击红色按钮或双击焦点节点退出</p>
                   <p>• <strong>切换焦点</strong>：在焦点模式下点击其他节点切换焦点</p>
@@ -728,8 +912,18 @@ const KnowledgeGraph = () => {
               </CardContent>
             </Card>
           )}
+          </div>
         </div>
-      </div>
+        </TabsContent>
+        
+        {/* AI助手标签页 */}
+        <TabsContent value="ai" className="flex-1 m-0">
+          <AIAssistant 
+            onEntityFocus={handleEntityFocus}
+            onEntitySearch={handleEntitySearch}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

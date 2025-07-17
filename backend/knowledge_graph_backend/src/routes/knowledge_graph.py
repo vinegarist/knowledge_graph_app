@@ -266,9 +266,6 @@ def search_entities():
             if query.lower() in node['label'].lower():
                 matching_entities.append(node)
         
-        # 按连接数从高到低排序搜索结果
-        matching_entities.sort(key=lambda x: x['connections'], reverse=True)
-        
         # 按连接数排序（与分页逻辑保持一致）
         sorted_nodes = sorted(full_graph['nodes'], key=lambda x: x['connections'], reverse=True)
         

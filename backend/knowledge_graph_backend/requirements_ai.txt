@@ -1,0 +1,10 @@
+# AI功能所需的Python依赖包
+requests>=2.31.0
+flask>=2.3.0
+flask-cors>=4.0.0
+
+# 如果需要使用其他AI服务，可以取消下面的注释
+# openai>=1.0.0
+# langchain>=0.1.0
+# langchain-openai>=0.1.0
+# langchain-ollama>=0.1.0 
