@@ -18,7 +18,7 @@ class AIConfig:
     OPENAI_MODEL = "gpt-3.5-turbo"
     
     # Ollama 配置
-    OLLAMA_BASE_URL = "http://localhost:11434"
+    OLLAMA_BASE_URL = "http://100.127.128.47:11434"
     OLLAMA_MODEL_NAME = "qwen3:4b"
     
     # AI助手配置

@@ -182,9 +182,9 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white overflow-hidden">
       {/* AI状态指示器 */}
-      <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
+      <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Bot className="h-6 w-6 text-blue-600" />
@@ -214,7 +214,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
       {/* 实体搜索面板 */}
       {showSearch && (
-        <div className="p-4 border-b bg-gray-50">
+        <div className="p-4 border-b bg-gray-50 flex-shrink-0">
           <div className="space-y-2">
             <Input
               placeholder="搜索医疗实体..."
@@ -263,12 +263,12 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
       )}
 
       {/* 聊天历史 */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex min-h-0">
         {/* 左侧聊天区域 */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           <div 
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto p-4 space-y-4"
+            className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
           >
             {chatHistory.length === 0 && (
               <div className="text-center text-gray-500 mt-8">
@@ -348,7 +348,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
           </div>
 
           {/* 输入区域 */}
-          <div className="p-4 border-t bg-gray-50">
+          <div className="p-4 border-t bg-gray-50 flex-shrink-0">
             {error && (
               <Alert variant="destructive" className="mb-4">
                 <AlertTriangle className="h-4 w-4" />
@@ -392,12 +392,12 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
         </div>
 
         {/* 右侧来源区域 */}
-        <div className="w-80 border-l bg-gray-50 flex flex-col">
-          <div className="p-4 border-b">
+        <div className="w-80 border-l bg-gray-50 flex flex-col flex-shrink-0">
+          <div className="p-4 border-b flex-shrink-0">
             <h3 className="font-semibold text-gray-800">参考来源</h3>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 min-h-0">
             {currentSources.length === 0 ? (
               <div className="text-center text-gray-500 mt-8">
                 <Search className="h-12 w-12 mx-auto mb-4 text-gray-300" />
@@ -452,7 +452,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
           {/* 来源分页 */}
           {totalSourcePages > 1 && (
-            <div className="p-4 border-t">
+            <div className="p-4 border-t flex-shrink-0">
               <div className="flex items-center justify-between">
                 <Button
                   size="sm"

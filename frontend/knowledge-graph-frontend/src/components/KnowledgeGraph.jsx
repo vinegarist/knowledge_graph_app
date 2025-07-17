@@ -3,9 +3,8 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw, MapPin, X, Bot, MessageSquare } from 'lucide-react';
+import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw, MapPin, X, Bot } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AIAssistant from './AIAssistant';
 
 // API基础URL
@@ -27,9 +26,15 @@ const KnowledgeGraph = () => {
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [focusMode, setFocusMode] = useState(false); // 焦点模式状态
   const [focusNode, setFocusNode] = useState(null); // 当前焦点节点
-  const [showAI, setShowAI] = useState(false); // 是否显示AI助手
-  const [activeTab, setActiveTab] = useState('graph'); // 当前活动标签页
+  const [leftPanelWidth, setLeftPanelWidth] = useState(320); // 左侧控制面板宽度
+  const [rightPanelWidth, setRightPanelWidth] = useState(window.innerWidth / 2); // 右侧AI助手宽度
+  const [showLeftPanel, setShowLeftPanel] = useState(true); // 是否显示左侧面板
+  const [showRightPanel, setShowRightPanel] = useState(true); // 是否显示右侧面板
+  const [isDragging, setIsDragging] = useState(null); // 拖拽状态
+  const [graphDimensions, setGraphDimensions] = useState({ width: 800, height: 600 }); // 图谱画布尺寸
+  
   const graphRef = useRef();
+  const containerRef = useRef();
 
   // 获取图谱基本信息
   const fetchGraphInfo = async () => {
@@ -523,48 +528,183 @@ const KnowledgeGraph = () => {
     if (node && graphRef.current) {
       setFocusNode(entityId);
       setFocusMode(true);
-      focusOnNode(node);
-      setActiveTab('graph'); // 切换到图谱视图
+      enterFocusMode(entityId);
     }
   };
 
   const handleEntitySearch = (entityLabel) => {
     setSearchQuery(entityLabel);
     handleSearch();
-    setActiveTab('graph'); // 切换到图谱视图
+  };
+
+  // 拖拽处理函数
+  const handleMouseDown = (panel) => {
+    setIsDragging(panel);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || !containerRef.current) return;
+    
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    
+    if (isDragging === 'left') {
+      const newWidth = Math.max(200, Math.min(600, e.clientX - containerRect.left));
+      setLeftPanelWidth(newWidth);
+    } else if (isDragging === 'right') {
+      const newWidth = Math.max(300, Math.min(containerWidth * 0.7, containerRect.right - e.clientX));
+      setRightPanelWidth(newWidth);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(null);
+  };
+
+  // 添加全局鼠标事件监听
+  React.useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging]);
+
+  // 计算图谱画布尺寸
+  const calculateGraphDimensions = () => {
+    const totalWidth = window.innerWidth;
+    const totalHeight = window.innerHeight - 60; // 减去顶部工具栏高度
+    
+    let availableWidth = totalWidth;
+    
+    // 减去左侧面板宽度
+    if (showLeftPanel) {
+      availableWidth -= leftPanelWidth + 1; // +1 是分割器宽度
+    }
+    
+    // 减去右侧AI助手宽度
+    if (showRightPanel) {
+      availableWidth -= rightPanelWidth + 1; // +1 是分割器宽度
+    }
+    
+    // 减去右侧统计面板宽度（当AI助手隐藏时）
+    if (!showRightPanel) {
+      availableWidth -= 320; // 统计面板宽度
+    }
+    
+    setGraphDimensions({
+      width: Math.max(400, availableWidth), // 最小宽度400px
+      height: totalHeight
+    });
+  };
+
+  // 监听窗口大小变化，调整AI助手面板宽度和图谱尺寸
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (showRightPanel) {
+        // 计算可用宽度：总宽度 - 左侧面板宽度 - 分割器宽度
+        const availableWidth = window.innerWidth - (showLeftPanel ? leftPanelWidth + 1 : 0);
+        // AI助手占可用宽度的50%，但至少400px，最多不超过可用宽度的70%
+        const newWidth = Math.max(400, Math.min(availableWidth * 0.5, availableWidth * 0.7));
+        setRightPanelWidth(newWidth);
+      }
+      calculateGraphDimensions();
+    };
+
+    handleResize(); // 立即执行一次
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showRightPanel, showLeftPanel, leftPanelWidth, rightPanelWidth]);
+
+  // 当面板显示状态或宽度改变时重新计算图谱尺寸
+  React.useEffect(() => {
+    calculateGraphDimensions();
+  }, [showLeftPanel, showRightPanel, leftPanelWidth, rightPanelWidth]);
+
+  // 快速布局调整功能
+  const setLayoutRatio = (ratio) => {
+    const availableWidth = window.innerWidth - (showLeftPanel ? leftPanelWidth + 1 : 0);
+    const newWidth = Math.max(400, availableWidth * ratio);
+    setRightPanelWidth(newWidth);
+    setShowRightPanel(true);
   };
 
   return (
-    <div className="w-full h-screen bg-gray-50">
+    <div className="w-full h-screen bg-gray-50 flex flex-col" ref={containerRef}>
       {/* 顶部工具栏 */}
-      <div className="bg-white shadow-sm border-b p-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-800">知识图谱可视化系统</h1>
-          
-          {/* 切换按钮 */}
-          <div className="flex items-center space-x-2">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
-              <TabsList>
-                <TabsTrigger value="graph" className="flex items-center space-x-2">
-                  <MapPin className="w-4 h-4" />
-                  <span>知识图谱</span>
-                </TabsTrigger>
-                <TabsTrigger value="ai" className="flex items-center space-x-2">
-                  <Bot className="w-4 h-4" />
-                  <span>AI助手</span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+      <div className="bg-white shadow-sm border-b p-2 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-800">知识图谱可视化系统</h1>
+          <div className="flex items-center space-x-4">
+            {/* 面板控制按钮 */}
+            <div className="flex items-center space-x-2">
+              <Button
+                variant={showLeftPanel ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowLeftPanel(!showLeftPanel)}
+                className="flex items-center space-x-1"
+              >
+                <MapPin className="w-4 h-4" />
+                <span className="text-xs">控制面板</span>
+              </Button>
+              <Button
+                variant={showRightPanel ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowRightPanel(!showRightPanel)}
+                className="flex items-center space-x-1"
+              >
+                <Bot className="w-4 h-4" />
+                <span className="text-xs">AI助手</span>
+              </Button>
+            </div>
+            
+            {/* 快速布局按钮 */}
+            <div className="flex items-center space-x-1 border-l pl-4">
+              <span className="text-xs text-gray-600">AI宽度:</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLayoutRatio(0.3)}
+                className="text-xs px-2"
+                title="AI助手占30%宽度"
+              >
+                30%
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLayoutRatio(0.5)}
+                className="text-xs px-2"
+                title="AI助手占50%宽度"
+              >
+                50%
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLayoutRatio(0.7)}
+                className="text-xs px-2"
+                title="AI助手占70%宽度"
+              >
+                70%
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 主要内容区域 */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-        <TabsContent value="graph" className="flex-1 m-0">
-          <div className="flex h-full">
-            {/* 图谱控制面板 */}
-            <div className="bg-white shadow-sm border-r p-4 w-96">
+      {/* 主要内容区域 - 可拖拽双栏布局 */}
+      <div className="flex flex-1 overflow-hidden">
+         {/* 左侧控制面板 */}
+         {showLeftPanel && (
+           <div 
+             className="bg-white shadow-sm border-r flex flex-col flex-shrink-0"
+             style={{ width: `${leftPanelWidth}px` }}
+           >
+             <div className="p-4 flex-1 overflow-y-auto">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">图谱控制</h2>
           
                         {/* 搜索框 */}
@@ -738,9 +878,21 @@ const KnowledgeGraph = () => {
                 </Button>
               </div>
             </div>
+          </div>
+         )}
 
-            {/* 主图谱区域 */}
-            <div className="flex-1 relative">
+         {/* 左侧拖拽分割器 */}
+         {showLeftPanel && (
+           <div
+             className="w-1 bg-gray-300 hover:bg-blue-400 cursor-col-resize flex items-center justify-center h-full"
+             onMouseDown={() => handleMouseDown('left')}
+           >
+             <div className="w-0.5 h-8 bg-gray-400 rounded"></div>
+           </div>
+         )}
+
+         {/* 主图谱区域 */}
+         <div className="flex-1 flex flex-col min-w-0 relative">
               {/* 错误提示 */}
               {error && (
                 <div className="absolute top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
@@ -757,6 +909,7 @@ const KnowledgeGraph = () => {
                   </div>
                 </div>
               )}
+
           {loading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
               <div className="text-lg">加载中...</div>
@@ -774,8 +927,8 @@ const KnowledgeGraph = () => {
             linkDirectionalArrowLength={6}
             linkDirectionalArrowRelPos={1}
             onNodeClick={handleNodeClick}
-            width={window.innerWidth * 0.75}
-            height={window.innerHeight - 80}
+            width={graphDimensions.width}
+            height={graphDimensions.height}
             backgroundColor="#f8f9fa"
             nodeCanvasObject={(node, ctx, globalScale) => {
               const label = node.name;
@@ -808,10 +961,40 @@ const KnowledgeGraph = () => {
               );
             }}
           />
-        </div>
+         </div>
 
-        {/* 侧边栏 */}
-        <div className="w-80 bg-white border-l p-4 overflow-y-auto">
+         {/* 右侧拖拽分割器 */}
+         {showRightPanel && (
+           <div
+             className="w-1 bg-gray-300 hover:bg-blue-400 cursor-col-resize flex items-center justify-center flex-shrink-0"
+             onMouseDown={() => handleMouseDown('right')}
+             style={{ height: `${window.innerHeight - 60}px` }}
+           >
+             <div className="w-0.5 h-8 bg-gray-400 rounded"></div>
+           </div>
+         )}
+
+         {/* 右侧：AI助手 */}
+         {showRightPanel && (
+           <div 
+             className="bg-white border-l flex flex-col flex-shrink-0"
+             style={{ 
+               width: `${rightPanelWidth}px`, 
+               height: `${window.innerHeight - 60}px`,
+               maxHeight: `${window.innerHeight - 60}px`
+             }}
+           >
+             <AIAssistant 
+               onEntityFocus={handleEntityFocus}
+               onEntitySearch={handleEntitySearch}
+             />
+           </div>
+         )}
+
+         {/* 图谱统计侧边栏 - 仅在AI助手隐藏时显示 */}
+         {!showRightPanel && (
+           <div className="w-80 bg-white border-l p-4 overflow-y-auto flex-shrink-0">
+
           {/* 图谱统计信息 */}
           <Card className="mb-4">
             <CardHeader>
@@ -915,18 +1098,9 @@ const KnowledgeGraph = () => {
               </CardContent>
             </Card>
           )}
-          </div>
         </div>
-        </TabsContent>
-        
-        {/* AI助手标签页 */}
-        <TabsContent value="ai" className="flex-1 m-0">
-          <AIAssistant 
-            onEntityFocus={handleEntityFocus}
-            onEntitySearch={handleEntitySearch}
-          />
-        </TabsContent>
-      </Tabs>
+          )}
+      </div>
     </div>
   );
 };
