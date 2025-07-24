@@ -334,12 +334,38 @@ class MedicalKnowledgeGraphAI:
                 "answer": "请输入您的医疗问题。",
                 "related_entities": [],
                 "suggested_focus": None,
-                "sources": [],
+                "sources": self._get_paginated_sources(),
                 "medical_disclaimer": True
             }
         
-        # 搜索相关实体
-        related_entities = self.search_entities(question, limit=8)
+        # 解析查询意图
+        query_intent = self._parse_query_intent(question)
+        print(f"[调试] 查询意图: {query_intent}")
+        
+        # 根据意图和疾病搜索相关实体
+        if query_intent['is_structured_query']:
+            print(f"[调试] 结构化查询: 疾病={query_intent['disease']}, 关系={query_intent['relation']}")
+            related_entities = self._search_by_relation(query_intent['disease'], query_intent['relation'], limit=8)
+        else:
+            print(f"[调试] 非结构化查询，使用通用搜索")
+            related_entities = self.search_entities(question, limit=8)
+        
+        # 如果没有找到相关实体，直接返回标准回答
+        if not related_entities:
+            answer = self._generate_no_knowledge_response(question)
+            # 清空当前来源
+            self.current_sources = []
+            self.current_page = 0
+            
+            return {
+                "answer": answer,
+                "related_entities": [],
+                "suggested_focus": None,
+                "sources": self._get_paginated_sources(),
+                "medical_disclaimer": True,
+                "context_used": "未找到相关实体",
+                "knowledge_graph_coverage": False
+            }
         
         # 构建详细的上下文信息
         context_info = []
@@ -371,10 +397,6 @@ class MedicalKnowledgeGraphAI:
             answer = self._call_ollama_strict(question, context_text, related_entities)
         else:
             answer = "OpenAI模型暂未实现"
-        
-        # 如果没有找到相关实体，提供标准回答
-        if not related_entities:
-            answer = self._generate_no_knowledge_response(question)
         
         # 验证AI回答中的实体引用
         validated_answer = self._validate_entity_references(answer, related_entities)
@@ -425,8 +447,18 @@ class MedicalKnowledgeGraphAI:
                 for entity in entities:
                     full_prompt += f"- {entity['label']} (ID: {entity['id']})\n"
                 full_prompt += "\n"
+                full_prompt += "⚠️ 重要约束：\n"
+                full_prompt += "1. 只能使用上述知识图谱中的实体和信息\n"
+                full_prompt += "2. 严禁编造或推测任何不在知识图谱中的实体\n"
+                full_prompt += "3. 如果知识图谱中没有相关信息，明确说明'知识图谱中未找到相关信息'\n"
+                full_prompt += "4. 回答中提到的每个实体都必须在上述列表中\n"
+                full_prompt += "5. 不要使用任何训练数据或常识知识\n\n"
             else:
                 full_prompt += "知识图谱上下文：无相关实体\n\n"
+                full_prompt += "⚠️ 重要约束：\n"
+                full_prompt += "1. 知识图谱中未找到相关实体\n"
+                full_prompt += "2. 严禁编造或推测任何实体\n"
+                full_prompt += "3. 明确告知用户知识图谱中没有相关信息\n\n"
             
             full_prompt += f"用户问题：{prompt}\n\n"
             full_prompt += "请严格按照上述约束回答，只能使用上述上下文中的信息和实体ID。如果没有相关信息，明确说明知识图谱中未找到相关信息。"
@@ -450,7 +482,25 @@ class MedicalKnowledgeGraphAI:
             
             if response.status_code == 200:
                 result = response.json()
-                return result.get("response", "抱歉，AI暂时无法回答您的问题。")
+                answer = result.get("response", "抱歉，AI暂时无法回答您的问题。")
+                
+                # 额外验证：检查回答中是否包含未授权的实体
+                if entities:
+                    valid_labels = set(entity['label'] for entity in entities)
+                    valid_ids = set(entity['id'] for entity in entities)
+                    
+                    # 简单的实体检测（可以进一步优化）
+                    import re
+                    # 检测可能的实体ID模式
+                    id_pattern = r'\b[A-Z]\d+\b'
+                    found_ids = re.findall(id_pattern, answer)
+                    
+                    # 检查是否有未授权的实体ID
+                    unauthorized_ids = [found_id for found_id in found_ids if found_id not in valid_ids]
+                    if unauthorized_ids:
+                        answer = f"⚠️ 检测到未授权的实体引用，已移除。\n\n{answer}"
+                
+                return answer
             else:
                 return f"AI服务错误（状态码：{response.status_code}）"
                 
@@ -591,3 +641,148 @@ class MedicalKnowledgeGraphAI:
 2. 咨询专业医生获取准确的医疗建议
 
 ⚠️ 医疗免责声明：本系统仅提供基于知识图谱的信息参考，不能替代专业医疗诊断和治疗建议。如有健康问题，请及时就医。""" 
+
+    def _parse_query_intent(self, query: str) -> Dict[str, Any]:
+        """解析查询意图，提取疾病、关系和目标"""
+        query_lower = query.lower().strip()
+        
+        # 定义查询模式
+        patterns = {
+            # 饮食相关
+            'diet': {
+                'keywords': ['吃什么', '饮食', '食物', '菜', '汤', '粥', '水果', '蔬菜', '营养'],
+                'relation': '推荐食谱',
+                'target_type': 'food'
+            },
+            # 药物相关
+            'medicine': {
+                'keywords': ['吃什么药', '药物', '药品', '药', '治疗', '用药', '处方'],
+                'relation': '常用药品',
+                'target_type': 'medicine'
+            },
+            # 症状相关
+            'symptoms': {
+                'keywords': ['症状', '表现', '征兆', '感觉', '不适'],
+                'relation': '症状',
+                'target_type': 'symptom'
+            },
+            # 检查相关
+            'examination': {
+                'keywords': ['检查', '化验', '检测', '诊断', '筛查'],
+                'relation': '检查项目',
+                'target_type': 'examination'
+            },
+            # 预防相关
+            'prevention': {
+                'keywords': ['预防', '避免', '防止', '预防措施'],
+                'relation': '预防措施',
+                'target_type': 'prevention'
+            },
+            # 并发症相关
+            'complications': {
+                'keywords': ['并发症', '后果', '影响', '恶化'],
+                'relation': '并发症',
+                'target_type': 'complication'
+            }
+        }
+        
+        # 检测查询意图
+        detected_intent = None
+        for intent, pattern in patterns.items():
+            if any(keyword in query_lower for keyword in pattern['keywords']):
+                detected_intent = intent
+                break
+        
+        # 提取疾病名称
+        disease_keywords = ['感冒', '发烧', '咳嗽', '头痛', '高血压', '糖尿病', '心脏病', '肺炎', '胃炎', '肝炎']
+        detected_disease = None
+        for disease in disease_keywords:
+            if disease in query_lower:
+                detected_disease = disease
+                break
+        
+        return {
+            'original_query': query,
+            'intent': detected_intent,
+            'disease': detected_disease,
+            'relation': patterns[detected_intent]['relation'] if detected_intent else None,
+            'target_type': patterns[detected_intent]['target_type'] if detected_intent else None,
+            'is_structured_query': detected_intent is not None and detected_disease is not None
+        }
+    
+    def _search_by_relation(self, disease: str, relation: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """根据疾病和关系搜索相关实体"""
+        if not disease or not relation:
+            return []
+        
+        print(f"[调试] 关系搜索: 疾病={disease}, 关系={relation}")
+        
+        results = []
+        
+        # 优先使用缓存
+        if self._use_cache and graph_cache.get_cached_graph():
+            cached_graph = graph_cache.get_cached_graph()
+            
+            # 查找疾病实体
+            disease_entities = []
+            for node in cached_graph.get('nodes', []):
+                if disease in node.get('label', ''):
+                    disease_entities.append(node)
+            
+            print(f"[调试] 找到疾病实体数量: {len(disease_entities)}")
+            
+            for disease_entity in disease_entities:
+                # 查找相关关系
+                for edge in cached_graph.get('edges', []):
+                    if edge.get('source') == disease_entity['id']:
+                        edge_relation = edge.get('relation', '')
+                        # 灵活的关系匹配
+                        if (relation in edge_relation or 
+                            edge_relation in relation or
+                            any(keyword in edge_relation for keyword in relation.split())):
+                            
+                            # 找到目标实体
+                            target_id = edge.get('target')
+                            for node in cached_graph.get('nodes', []):
+                                if node.get('id') == target_id:
+                                    result = {
+                                        **node,
+                                        "match_type": "relation",
+                                        "match_score": 90,
+                                        "relation": edge_relation,
+                                        "source_disease": disease_entity['label'],
+                                        "edge_id": edge.get('id')
+                                    }
+                                    results.append(result)
+                                    break
+        else:
+            # 备用搜索
+            for node in self.knowledge_graph_data.get("nodes", []):
+                if disease in node.get('label', ''):
+                    # 查找该实体的关系
+                    entity_id = node.get('id')
+                    for edge in self.knowledge_graph_data.get("edges", []):
+                        if edge.get('source') == entity_id:
+                            edge_relation = edge.get('relation', '')
+                            # 灵活的关系匹配
+                            if (relation in edge_relation or 
+                                edge_relation in relation or
+                                any(keyword in edge_relation for keyword in relation.split())):
+                                
+                                # 查找目标实体
+                                target_id = edge.get('target')
+                                for target_node in self.knowledge_graph_data.get("nodes", []):
+                                    if target_node.get('id') == target_id:
+                                        result = {
+                                            **target_node,
+                                            "match_type": "relation",
+                                            "match_score": 90,
+                                            "relation": edge_relation,
+                                            "source_disease": node.get('label'),
+                                            "edge_id": edge.get('id')
+                                        }
+                                        results.append(result)
+                                        break
+        
+        print(f"[调试] 关系搜索结果数量: {len(results)}")
+        return results[:limit] 

@@ -135,11 +135,15 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
         // 更新来源信息
         if (data.data.sources) {
           console.log('来源数据:', data.data.sources); // 调试信息
+          console.log('来源数组:', data.data.sources.sources); // 调试信息
           setCurrentSources(data.data.sources.sources || []);
           setSourcePage(data.data.sources.current_page || 1);
           setTotalSourcePages(data.data.sources.total_pages || 1);
         } else {
           console.log('没有来源数据'); // 调试信息
+          setCurrentSources([]);
+          setSourcePage(1);
+          setTotalSourcePages(1);
         }
       } else {
         setError(data.error || '处理请求时出错');
@@ -178,6 +182,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
       const data = await response.json();
       if (data.success) {
+        console.log('分页数据:', data.data); // 调试信息
         setCurrentSources(data.data.sources || []);
         setSourcePage(data.data.current_page || 1);
         setTotalSourcePages(data.data.total_pages || 1);
@@ -329,7 +334,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
       {/* 聊天历史 */}
       <div className="flex-1 overflow-hidden flex min-h-0">
         {/* 左侧聊天区域 */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div 
             ref={chatContainerRef}
             className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
@@ -344,7 +349,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
             
             {chatHistory.map((message, index) => (
               <div key={index} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] ${message.type === 'user' ? 'order-2' : 'order-1'}`}>
+                <div className={`${message.type === 'user' ? 'max-w-[70%]' : 'max-w-[75%]'} ${message.type === 'user' ? 'order-2' : 'order-1'}`}>
                   <div className={`flex items-start space-x-2 ${message.type === 'user' ? 'flex-row-reverse' : ''}`}>
                     <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                       message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'
@@ -356,7 +361,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
                         ? 'bg-blue-500 text-white' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      <div className="whitespace-pre-wrap">{message.content}</div>
+                      <div className="whitespace-pre-wrap break-words max-w-full overflow-hidden">{message.content}</div>
                       <div className="text-xs opacity-70 mt-1">{message.timestamp}</div>
                       
                       {/* AI回答的相关实体 */}
@@ -468,7 +473,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
         </div>
 
         {/* 右侧来源区域 */}
-        <div className="w-80 border-l bg-gray-50 flex flex-col flex-shrink-0">
+        <div className="w-80 border-l bg-gray-50 flex flex-col flex-shrink-0 overflow-hidden">
           <div className="p-4 border-b flex-shrink-0">
             <h3 className="font-semibold text-gray-800">参考来源</h3>
           </div>
@@ -478,9 +483,13 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
               <div className="text-center text-gray-500 mt-8">
                 <Search className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                 <p>提问后将显示相关实体</p>
+                <p className="text-xs mt-2">调试信息: 当前来源数量 = {currentSources.length}</p>
               </div>
             ) : (
               <div className="space-y-3">
+                <div className="text-xs text-gray-500 mb-2">
+                  找到 {currentSources.length} 个相关实体
+                </div>
                 {currentSources.map((source, index) => (
                   <Card key={index} className="border border-gray-200">
                     <CardHeader className="pb-2">

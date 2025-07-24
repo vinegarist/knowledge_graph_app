@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI助手布局测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        .header {
+            padding: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            background: linear-gradient(to right, #eff6ff, #f3e8ff);
+            flex-shrink: 0;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            min-height: 0;
+        }
+        
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-height: 0;
+        }
+        
+        .message {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        
+        .message.user {
+            justify-content: flex-end;
+        }
+        
+        .message-content {
+            max-width: 75%;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        
+        .message.user .message-content {
+            background: #3b82f6;
+            color: white;
+            max-width: 70%;
+        }
+        
+        .message.ai .message-content {
+            background: #f3f4f6;
+            color: #1f2937;
+        }
+        
+        .avatar {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .user .avatar {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .ai .avatar {
+            background: #d1d5db;
+            color: #4b5563;
+        }
+        
+        .input-area {
+            padding: 1rem;
+            border-top: 1px solid #e5e7eb;
+            background: #f9fafb;
+            flex-shrink: 0;
+        }
+        
+        .sources-area {
+            width: 320px;
+            border-left: 1px solid #e5e7eb;
+            background: #f9fafb;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        
+        .sources-header {
+            padding: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        
+        .sources-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            min-height: 0;
+        }
+        
+        .source-item {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .long-text {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>医疗知识图谱AI助手</h2>
+            <p>严格基于知识图谱数据回答</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="chat-area">
+                <div class="chat-messages">
+                    <div class="message ai">
+                        <div class="avatar">AI</div>
+                        <div class="message-content">
+                            <div class="long-text">这是一个很长的AI回答，用来测试布局是否会被右侧来源区域遮挡。这个回答包含了很多文字内容，应该能够正确换行并且不会影响右侧来源区域的显示。如果布局正确，右侧的来源区域应该始终可见，不会被这个长回答遮挡住。</div>
+                        </div>
+                    </div>
+                    
+                    <div class="message user">
+                        <div class="message-content">
+                            <div class="long-text">用户的问题</div>
+                        </div>
+                        <div class="avatar">U</div>
+                    </div>
+                    
+                    <div class="message ai">
+                        <div class="avatar">AI</div>
+                        <div class="message-content">
+                            <div class="long-text">这是另一个很长的AI回答，继续测试布局。这个回答也包含了很多文字内容，应该能够正确换行并且不会影响右侧来源区域的显示。如果布局正确，右侧的来源区域应该始终可见，不会被这个长回答遮挡住。这个回答还包含了一些额外的信息，比如相关的医疗知识、症状描述、治疗方法等，这些内容可能会让回答变得更长，但布局应该仍然保持正确。</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="input-area">
+                    <textarea placeholder="请输入您的医疗问题..." style="width: 100%; min-height: 80px; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; resize: none;"></textarea>
+                </div>
+            </div>
+            
+            <div class="sources-area">
+                <div class="sources-header">
+                    <h3>参考来源</h3>
+                </div>
+                <div class="sources-content">
+                    <div class="source-item">
+                        <h4>感冒</h4>
+                        <p>连接数: 15</p>
+                        <span style="background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">精确匹配</span>
+                    </div>
+                    <div class="source-item">
+                        <h4>上呼吸道感染</h4>
+                        <p>连接数: 12</p>
+                        <span style="background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">模糊匹配</span>
+                    </div>
+                    <div class="source-item">
+                        <h4>发热</h4>
+                        <p>连接数: 8</p>
+                        <span style="background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem;">精确匹配</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 
