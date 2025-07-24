@@ -152,26 +152,30 @@ class KnowledgeGraphCache:
         }
     
     def _build_search_index(self, graph_data: Dict[str, Any]) -> None:
-        """构建优化的搜索索引"""
-        print("[索引] 构建搜索索引...")
+        """构建搜索索引"""
         start_time = time.time()
+        print(f"[索引] 开始构建搜索索引...")
         
-        # 多级索引结构
+        # 初始化索引结构
         self._search_index = {
-            'exact': {},           # 精确匹配
-            'prefix': defaultdict(list),  # 前缀匹配
-            'token': defaultdict(list),   # 词语匹配
-            'entities': {}         # 实体映射
+            'entities': {},      # 实体ID -> 实体信息
+            'exact': {},         # 精确匹配
+            'prefix': defaultdict(list),  # 前缀索引
+            'token': defaultdict(list),   # 词语索引
+            'relations': defaultdict(list),  # 关系索引: 疾病ID -> [(关系, 目标ID)]
+            'disease_relations': defaultdict(list),  # 疾病名称 -> [(关系, 目标ID)]
+            'relation_targets': defaultdict(list),   # 关系类型 -> [(疾病ID, 目标ID)]
         }
         
-        # 医疗术语预处理
+        # 医疗同义词映射
         medical_synonyms = {
-            '感冒': ['感冒', '普通感冒', '上呼吸道感染', '流感'],
-            '发烧': ['发热', '发烧', '体温升高', '高热'],
+            '感冒': ['感冒', '普通感冒', '上呼吸道感染'],
+            '发烧': ['发热', '发烧', '体温升高'],
             '咳嗽': ['咳嗽', '咳痰', '干咳'],
             '头痛': ['头痛', '头疼', '偏头痛']
         }
         
+        # 构建实体索引
         for node in graph_data['nodes']:
             entity_id = node['id']
             label = node['label'].lower()
@@ -199,8 +203,33 @@ class KnowledgeGraphCache:
                     for synonym in synonyms:
                         self._search_index['exact'][synonym.lower()] = entity_id
         
+        # 构建关系索引
+        print(f"[索引] 构建关系索引...")
+        for edge in graph_data['edges']:
+            source_id = edge.get('source')
+            target_id = edge.get('target')
+            relation = edge.get('relation', '')
+            
+            if source_id and target_id and relation:
+                # 关系索引
+                self._search_index['relations'][source_id].append((relation, target_id))
+                
+                # 关系目标索引
+                self._search_index['relation_targets'][relation].append((source_id, target_id))
+                
+                # 疾病关系索引（通过实体标签）
+                source_entity = self._search_index['entities'].get(source_id)
+                if source_entity:
+                    source_label = source_entity.get('label', '').lower()
+                    # 检查是否是疾病实体
+                    if any(disease in source_label for disease in ['感冒', '发烧', '咳嗽', '头痛', '高血压', '糖尿病']):
+                        self._search_index['disease_relations'][source_label].append((relation, target_id))
+        
         end_time = time.time()
         print(f"[索引] 索引构建完成, 耗时 {end_time - start_time:.2f}s")
+        print(f"[索引] 实体数量: {len(self._search_index['entities'])}")
+        print(f"[索引] 关系数量: {len(self._search_index['relations'])}")
+        print(f"[索引] 疾病关系数量: {len(self._search_index['disease_relations'])}")
     
     def search_entities_fast(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
@@ -251,6 +280,95 @@ class KnowledgeGraphCache:
         # 按分数和连接数排序
         results.sort(key=lambda x: (x['match_score'], x.get('connections', 0)), reverse=True)
         
+        return results[:limit]
+    
+    def search_by_relation_fast(self, disease: str, relation: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        快速关系搜索
+        时间复杂度: O(1) 到 O(log N)
+        """
+        if not disease or not relation or not self._search_index:
+            return []
+        
+        print(f"[快速关系搜索] 疾病={disease}, 关系={relation}")
+        start_time = time.time()
+        
+        results = []
+        seen_ids = set()
+        
+        # 1. 通过疾病关系索引快速查找
+        disease_lower = disease.lower()
+        if disease_lower in self._search_index['disease_relations']:
+            relations = self._search_index['disease_relations'][disease_lower]
+            for rel, target_id in relations:
+                if relation in rel and target_id not in seen_ids:
+                    target_entity = self._search_index['entities'].get(target_id)
+                    if target_entity:
+                        result = {
+                            **target_entity,
+                            "match_type": "relation",
+                            "match_score": 95,
+                            "relation": rel,
+                            "source_disease": disease,
+                            "search_method": "disease_relations_index"
+                        }
+                        results.append(result)
+                        seen_ids.add(target_id)
+                        if len(results) >= limit:
+                            break
+        
+        # 2. 通过关系目标索引查找
+        if len(results) < limit and relation in self._search_index['relation_targets']:
+            relation_pairs = self._search_index['relation_targets'][relation]
+            for source_id, target_id in relation_pairs:
+                if target_id not in seen_ids:
+                    source_entity = self._search_index['entities'].get(source_id)
+                    target_entity = self._search_index['entities'].get(target_id)
+                    
+                    if (source_entity and target_entity and 
+                        disease in source_entity.get('label', '').lower()):
+                        result = {
+                            **target_entity,
+                            "match_type": "relation",
+                            "match_score": 90,
+                            "relation": relation,
+                            "source_disease": source_entity.get('label'),
+                            "search_method": "relation_targets_index"
+                        }
+                        results.append(result)
+                        seen_ids.add(target_id)
+                        if len(results) >= limit:
+                            break
+        
+        # 3. 通过实体ID查找疾病实体，然后查找关系
+        if len(results) < limit:
+            for entity_id, entity in self._search_index['entities'].items():
+                if disease in entity.get('label', '').lower():
+                    relations = self._search_index['relations'].get(entity_id, [])
+                    for rel, target_id in relations:
+                        if relation in rel and target_id not in seen_ids:
+                            target_entity = self._search_index['entities'].get(target_id)
+                            if target_entity:
+                                result = {
+                                    **target_entity,
+                                    "match_type": "relation",
+                                    "match_score": 85,
+                                    "relation": rel,
+                                    "source_disease": entity.get('label'),
+                                    "search_method": "entity_relations_index"
+                                }
+                                results.append(result)
+                                seen_ids.add(target_id)
+                                if len(results) >= limit:
+                                    break
+                    if len(results) >= limit:
+                        break
+        
+        end_time = time.time()
+        print(f"[快速关系搜索] 找到 {len(results)} 个结果, 耗时 {end_time - start_time:.3f}s")
+        
+        # 按分数排序
+        results.sort(key=lambda x: x['match_score'], reverse=True)
         return results[:limit]
     
     def get_cached_graph(self) -> Optional[Dict[str, Any]]:

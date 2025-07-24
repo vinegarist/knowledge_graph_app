@@ -6,6 +6,9 @@ import json
 import re
 import requests
 from collections import defaultdict
+import time # Added for timing in _search_by_relation
+import asyncio
+import concurrent.futures
 
 from src.config.ai_config import AIConfig, ModelType
 from src.utils.graph_cache import graph_cache
@@ -342,13 +345,8 @@ class MedicalKnowledgeGraphAI:
         query_intent = self._parse_query_intent(question)
         print(f"[调试] 查询意图: {query_intent}")
         
-        # 根据意图和疾病搜索相关实体
-        if query_intent['is_structured_query']:
-            print(f"[调试] 结构化查询: 疾病={query_intent['disease']}, 关系={query_intent['relation']}")
-            related_entities = self._search_by_relation(query_intent['disease'], query_intent['relation'], limit=8)
-        else:
-            print(f"[调试] 非结构化查询，使用通用搜索")
-            related_entities = self.search_entities(question, limit=8)
+        # 使用并发搜索提升性能
+        related_entities = self._search_concurrent(query_intent, limit=8)
         
         # 如果没有找到相关实体，直接返回标准回答
         if not related_entities:
@@ -716,73 +714,125 @@ class MedicalKnowledgeGraphAI:
             return []
         
         print(f"[调试] 关系搜索: 疾病={disease}, 关系={relation}")
+        start_time = time.time()
         
+        # 优先使用缓存的快速关系搜索
+        if self._use_cache and graph_cache.get_cached_graph():
+            results = graph_cache.search_by_relation_fast(disease, relation, limit)
+            end_time = time.time()
+            print(f"[调试] 快速关系搜索完成, 耗时 {end_time - start_time:.3f}s")
+            return results
+        
+        # 备用：原始搜索算法
         results = []
         
-        # 优先使用缓存
-        if self._use_cache and graph_cache.get_cached_graph():
-            cached_graph = graph_cache.get_cached_graph()
-            
-            # 查找疾病实体
-            disease_entities = []
-            for node in cached_graph.get('nodes', []):
-                if disease in node.get('label', ''):
-                    disease_entities.append(node)
-            
-            print(f"[调试] 找到疾病实体数量: {len(disease_entities)}")
-            
-            for disease_entity in disease_entities:
-                # 查找相关关系
-                for edge in cached_graph.get('edges', []):
-                    if edge.get('source') == disease_entity['id']:
-                        edge_relation = edge.get('relation', '')
-                        # 灵活的关系匹配
-                        if (relation in edge_relation or 
-                            edge_relation in relation or
-                            any(keyword in edge_relation for keyword in relation.split())):
-                            
-                            # 找到目标实体
-                            target_id = edge.get('target')
-                            for node in cached_graph.get('nodes', []):
-                                if node.get('id') == target_id:
-                                    result = {
-                                        **node,
-                                        "match_type": "relation",
-                                        "match_score": 90,
-                                        "relation": edge_relation,
-                                        "source_disease": disease_entity['label'],
-                                        "edge_id": edge.get('id')
-                                    }
-                                    results.append(result)
-                                    break
-        else:
-            # 备用搜索
-            for node in self.knowledge_graph_data.get("nodes", []):
-                if disease in node.get('label', ''):
-                    # 查找该实体的关系
-                    entity_id = node.get('id')
-                    for edge in self.knowledge_graph_data.get("edges", []):
-                        if edge.get('source') == entity_id:
-                            edge_relation = edge.get('relation', '')
-                            # 灵活的关系匹配
-                            if (relation in edge_relation or 
-                                edge_relation in relation or
-                                any(keyword in edge_relation for keyword in relation.split())):
-                                
-                                # 查找目标实体
-                                target_id = edge.get('target')
-                                for target_node in self.knowledge_graph_data.get("nodes", []):
-                                    if target_node.get('id') == target_id:
-                                        result = {
-                                            **target_node,
-                                            "match_type": "relation",
-                                            "match_score": 90,
-                                            "relation": edge_relation,
-                                            "source_disease": node.get('label'),
-                                            "edge_id": edge.get('id')
-                                        }
-                                        results.append(result)
-                                        break
+        # 查找疾病实体
+        disease_entities = []
+        for node in self.knowledge_graph_data.get("nodes", []):
+            if disease in node.get("label", ""):
+                disease_entities.append(node)
         
-        print(f"[调试] 关系搜索结果数量: {len(results)}")
+        print(f"[调试] 找到疾病实体数量: {len(disease_entities)}")
+        
+        for disease_entity in disease_entities:
+            # 查找相关关系
+            for edge in self.knowledge_graph_data.get("edges", []):
+                if edge.get('source') == disease_entity['id']:
+                    edge_relation = edge.get('relation', '')
+                    # 灵活的关系匹配
+                    if (relation in edge_relation or 
+                        edge_relation in relation or
+                        any(keyword in edge_relation for keyword in relation.split())):
+                        
+                        # 找到目标实体
+                        target_id = edge.get('target')
+                        for node in self.knowledge_graph_data.get("nodes", []):
+                            if node.get('id') == target_id:
+                                result = {
+                                    **node,
+                                    "match_type": "relation",
+                                    "match_score": 90,
+                                    "relation": edge_relation,
+                                    "source_disease": disease_entity['label'],
+                                    "edge_id": edge.get('id'),
+                                    "search_method": "fallback_search"
+                                }
+                                results.append(result)
+                                break
+        
+        end_time = time.time()
+        print(f"[调试] 关系搜索结果数量: {len(results)}, 耗时 {end_time - start_time:.3f}s")
+        return results[:limit] 
+
+    def _search_concurrent(self, query_intent: Dict[str, Any], limit: int = 8) -> List[Dict[str, Any]]:
+        """并发搜索相关实体"""
+        if not query_intent['is_structured_query']:
+            return self.search_entities(query_intent['original_query'], limit)
+        
+        start_time = time.time()
+        print(f"[并发搜索] 开始并发搜索: 疾病={query_intent['disease']}, 关系={query_intent['relation']}")
+        
+        # 使用线程池进行并发搜索
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            # 提交多个搜索任务
+            future_relation = executor.submit(
+                self._search_by_relation, 
+                query_intent['disease'], 
+                query_intent['relation'], 
+                limit
+            )
+            
+            future_entities = executor.submit(
+                self.search_entities, 
+                query_intent['disease'], 
+                limit // 2
+            )
+            
+            future_keywords = executor.submit(
+                self.search_entities, 
+                query_intent['relation'], 
+                limit // 2
+            )
+            
+            # 收集结果
+            results = []
+            seen_ids = set()
+            
+            # 关系搜索结果（最高优先级）
+            try:
+                relation_results = future_relation.result(timeout=2.0)
+                for result in relation_results:
+                    if result.get('id') not in seen_ids:
+                        results.append(result)
+                        seen_ids.add(result.get('id'))
+            except concurrent.futures.TimeoutError:
+                print("[并发搜索] 关系搜索超时")
+            
+            # 疾病实体搜索结果
+            try:
+                entity_results = future_entities.result(timeout=1.0)
+                for result in entity_results:
+                    if result.get('id') not in seen_ids and len(results) < limit:
+                        result['match_score'] = result.get('match_score', 0) * 0.8  # 降低分数
+                        results.append(result)
+                        seen_ids.add(result.get('id'))
+            except concurrent.futures.TimeoutError:
+                print("[并发搜索] 实体搜索超时")
+            
+            # 关系关键词搜索结果
+            try:
+                keyword_results = future_keywords.result(timeout=1.0)
+                for result in keyword_results:
+                    if result.get('id') not in seen_ids and len(results) < limit:
+                        result['match_score'] = result.get('match_score', 0) * 0.6  # 进一步降低分数
+                        results.append(result)
+                        seen_ids.add(result.get('id'))
+            except concurrent.futures.TimeoutError:
+                print("[并发搜索] 关键词搜索超时")
+        
+        end_time = time.time()
+        print(f"[并发搜索] 完成, 找到 {len(results)} 个结果, 耗时 {end_time - start_time:.3f}s")
+        
+        # 按分数排序
+        results.sort(key=lambda x: x.get('match_score', 0), reverse=True)
         return results[:limit] 
