@@ -136,12 +136,18 @@ class MedicalKnowledgeGraphAI:
         if not query.strip():
             return []
         
+        print(f"[调试] 搜索查询: {query}, 限制: {limit}") # 调试信息
+        
         # 优先使用缓存的快速搜索
         if self._use_cache and graph_cache.get_cached_graph():
-            return graph_cache.search_entities_fast(query, limit)
+            results = graph_cache.search_entities_fast(query, limit)
+            print(f"[调试] 缓存搜索结果数量: {len(results)}") # 调试信息
+            return results
         
         # 备用：原始搜索算法
-        return self._search_entities_fallback(query, limit)
+        results = self._search_entities_fallback(query, limit)
+        print(f"[调试] 备用搜索结果数量: {len(results)}") # 调试信息
+        return results
     
     def _search_entities_fallback(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """备用搜索算法 - 当缓存不可用时使用"""
@@ -388,6 +394,11 @@ class MedicalKnowledgeGraphAI:
         # 更新当前来源
         self.current_sources = related_entities
         self.current_page = 0
+        
+        # 调试信息
+        print(f"[调试] 相关实体数量: {len(related_entities)}")
+        print(f"[调试] 当前来源数量: {len(self.current_sources)}")
+        print(f"[调试] 分页来源: {self._get_paginated_sources()}")
         
         return {
             "answer": validated_answer,

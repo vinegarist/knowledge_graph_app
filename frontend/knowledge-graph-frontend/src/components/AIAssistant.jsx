@@ -134,9 +134,12 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
         
         // 更新来源信息
         if (data.data.sources) {
+          console.log('来源数据:', data.data.sources); // 调试信息
           setCurrentSources(data.data.sources.sources || []);
           setSourcePage(data.data.sources.current_page || 1);
           setTotalSourcePages(data.data.sources.total_pages || 1);
+        } else {
+          console.log('没有来源数据'); // 调试信息
         }
       } else {
         setError(data.error || '处理请求时出错');
