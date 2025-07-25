@@ -474,7 +474,7 @@ class MedicalKnowledgeGraphAI:
                         "top_k": 10
                     }
                 },
-                timeout=30,
+                timeout=(10, 120),  # 连接超时10秒，读取超时60秒
                 proxies={'http': '', 'https': ''}  # 禁用代理
             )
             
@@ -648,13 +648,13 @@ class MedicalKnowledgeGraphAI:
         patterns = {
             # 饮食相关
             'diet': {
-                'keywords': ['吃什么', '饮食', '食物', '菜', '汤', '粥', '水果', '蔬菜', '营养'],
+                'keywords': ['吃什么食物', '吃什么菜', '饮食', '食物', '菜', '汤', '粥', '水果', '蔬菜', '营养', '吃什么好'],
                 'relation': '推荐食谱',
                 'target_type': 'food'
             },
             # 药物相关
             'medicine': {
-                'keywords': ['吃什么药', '药物', '药品', '药', '治疗', '用药', '处方'],
+                'keywords': ['吃什么药', '药物', '药品', '药', '治疗', '用药', '处方', '吃药', '服药'],
                 'relation': '常用药品',
                 'target_type': 'medicine'
             },
@@ -690,12 +690,21 @@ class MedicalKnowledgeGraphAI:
             }
         }
         
-        # 检测查询意图
+        # 检测查询意图 - 优先检查药物相关意图
         detected_intent = None
-        for intent, pattern in patterns.items():
-            if any(keyword in query_lower for keyword in pattern['keywords']):
-                detected_intent = intent
-                break
+        
+        # 首先检查药物相关意图（优先级最高）
+        # 特殊处理"吃什么药"的情况
+        if '吃什么药' in query_lower or ('吃什么' in query_lower and '药' in query_lower):
+            detected_intent = 'medicine'
+        elif any(keyword in query_lower for keyword in patterns['medicine']['keywords']):
+            detected_intent = 'medicine'
+        # 然后检查其他意图
+        else:
+            for intent, pattern in patterns.items():
+                if intent != 'medicine' and any(keyword in query_lower for keyword in pattern['keywords']):
+                    detected_intent = intent
+                    break
         
         # 提取疾病名称
         disease_keywords = ['感冒', '发烧', '咳嗽', '头痛', '高血压', '糖尿病', '心脏病', '肺炎', '胃炎', '肝炎']
