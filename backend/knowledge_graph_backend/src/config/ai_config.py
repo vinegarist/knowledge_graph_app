@@ -19,7 +19,8 @@ class AIConfig:
     
     # Ollama 配置
     OLLAMA_BASE_URL = "http://100.127.128.47:11434"
-    OLLAMA_MODEL_NAME = "qwen3:4b"
+    OLLAMA_MODEL = "qwen3:4b"
+    OLLAMA_MODEL_NAME = "qwen3:4b"  # 保持向后兼容
     
     # AI助手配置
     MEDICAL_AI_PROMPT = """你是一个严格基于医疗知识图谱的AI助手。

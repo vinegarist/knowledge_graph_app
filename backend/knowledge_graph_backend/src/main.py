@@ -10,6 +10,7 @@ from src.routes.user import user_bp
 from src.routes.knowledge_graph import knowledge_graph_bp
 from src.routes.ai_assistant import ai_bp
 from src.routes.symptom_diagnosis import symptom_diagnosis_bp, init_diagnosis_engine
+from src.routes.ai_symptom_diagnosis import ai_symptom_diagnosis_bp, init_ai_diagnosis_engine
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
@@ -21,6 +22,7 @@ app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(knowledge_graph_bp, url_prefix='/api')
 app.register_blueprint(ai_bp, url_prefix='/api')
 app.register_blueprint(symptom_diagnosis_bp, url_prefix='/api/symptom-diagnosis')
+app.register_blueprint(ai_symptom_diagnosis_bp, url_prefix='/api/ai-symptom-diagnosis')
 
 # uncomment if you need to use database
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"

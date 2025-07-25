@@ -8,6 +8,7 @@ import os
 from src.ai.medical_ai import MedicalKnowledgeGraphAI
 from src.utils.graph_cache import graph_cache
 from src.routes.symptom_diagnosis import init_diagnosis_engine
+from src.routes.ai_symptom_diagnosis import init_ai_diagnosis_engine
 
 ai_bp = Blueprint('ai_assistant', __name__)
 CORS(ai_bp)
@@ -34,17 +35,23 @@ def init_ai_assistant():
             
             # 初始化症状诊断引擎
             init_diagnosis_engine(ai_assistant)
-            print(f"[信息] 症状诊断引擎初始化成功")
+            # 初始化AI诊断引擎
+            init_ai_diagnosis_engine(ai_assistant)
+            print(f"[信息] 症状诊断引擎和AI诊断引擎初始化成功")
         else:
             print(f"[警告] CSV文件不存在: {csv_path}")
             ai_assistant = MedicalKnowledgeGraphAI()
             # 初始化症状诊断引擎
             init_diagnosis_engine(ai_assistant)
+            # 初始化AI诊断引擎
+            init_ai_diagnosis_engine(ai_assistant)
     except Exception as e:
         print(f"[错误] 初始化AI助手失败: {str(e)}")
         ai_assistant = MedicalKnowledgeGraphAI()
         # 初始化症状诊断引擎
         init_diagnosis_engine(ai_assistant)
+        # 初始化AI诊断引擎
+        init_ai_diagnosis_engine(ai_assistant)
 
 # 初始化AI助手
 init_ai_assistant()

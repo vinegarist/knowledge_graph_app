@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import KnowledgeGraph from './components/KnowledgeGraph';
 import SymptomDiagnosisPage from './components/SymptomDiagnosisPage';
+import AISymptomDiagnosisPage from './components/AISymptomDiagnosisPage';
 import { Button } from './components/ui/button';
 import { 
   Network, 
   Stethoscope, 
+  Brain,
   Home,
   Settings
 } from 'lucide-react';
 import './App.css';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('knowledge-graph'); // 'knowledge-graph' or 'symptom-diagnosis'
+  const [currentPage, setCurrentPage] = useState('knowledge-graph'); // 'knowledge-graph', 'symptom-diagnosis', or 'ai-symptom-diagnosis'
 
   return (
     <div className="App">
@@ -39,6 +41,15 @@ function App() {
                 <Stethoscope className="h-4 w-4" />
                 症状诊断
               </Button>
+              <Button
+                variant={currentPage === 'ai-symptom-diagnosis' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setCurrentPage('ai-symptom-diagnosis')}
+                className="flex items-center gap-2"
+              >
+                <Brain className="h-4 w-4" />
+                AI诊断
+              </Button>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -53,6 +64,7 @@ function App() {
       <div className="flex-1">
         {currentPage === 'knowledge-graph' && <KnowledgeGraph />}
         {currentPage === 'symptom-diagnosis' && <SymptomDiagnosisPage />}
+        {currentPage === 'ai-symptom-diagnosis' && <AISymptomDiagnosisPage />}
       </div>
     </div>
   );
