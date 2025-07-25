@@ -525,8 +525,19 @@ const KnowledgeGraph = () => {
 
   // AI助手回调函数
   const handleEntityFocus = (entityId) => {
+    console.log('KnowledgeGraph: 处理实体聚焦:', entityId);
+    
+    // 首先检查当前图谱中是否有该节点
     const node = graphData.nodes.find(n => n.id === entityId);
+    
     if (node && graphRef.current) {
+      console.log('KnowledgeGraph: 在当前图谱中找到节点，直接聚焦');
+      setFocusNode(entityId);
+      setFocusMode(true);
+      enterFocusMode(entityId);
+    } else {
+      console.log('KnowledgeGraph: 当前图谱中未找到节点，尝试从服务器获取邻居信息');
+      // 如果当前图谱中没有该节点，直接调用enterFocusMode从服务器获取
       setFocusNode(entityId);
       setFocusMode(true);
       enterFocusMode(entityId);

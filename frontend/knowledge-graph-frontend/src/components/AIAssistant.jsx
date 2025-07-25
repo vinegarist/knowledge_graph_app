@@ -211,8 +211,16 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   };
 
   const handleEntityClick = (entity) => {
+    console.log('AIAssistant: 实体点击事件:', entity);
     if (onEntityFocus && entity.id) {
+      console.log('AIAssistant: 调用onEntityFocus回调，实体ID:', entity.id);
       onEntityFocus(entity.id);
+    } else {
+      console.log('AIAssistant: 无法调用聚焦回调，原因:', {
+        hasOnEntityFocus: !!onEntityFocus,
+        hasEntityId: !!entity.id,
+        entityId: entity.id
+      });
     }
   };
 
