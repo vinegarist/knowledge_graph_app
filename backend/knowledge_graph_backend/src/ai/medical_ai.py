@@ -474,7 +474,7 @@ class MedicalKnowledgeGraphAI:
                         "top_k": 10
                     }
                 },
-                timeout=(10, 120),  # 连接超时10秒，读取超时60秒
+                timeout=(10, 180),  # 连接超时10秒，读取超时60秒
                 proxies={'http': '', 'https': ''}  # 禁用代理
             )
             
@@ -648,7 +648,7 @@ class MedicalKnowledgeGraphAI:
         patterns = {
             # 饮食相关
             'diet': {
-                'keywords': ['吃什么食物', '吃什么菜', '饮食', '食物', '菜', '汤', '粥', '水果', '蔬菜', '营养', '吃什么好'],
+                'keywords': ['吃什么食物', '吃什么菜', '应该吃什么', '饮食', '食物', '菜', '汤', '粥', '水果', '蔬菜', '营养', '吃什么好'],
                 'relation': '推荐食谱',
                 'target_type': 'food'
             },
@@ -660,7 +660,7 @@ class MedicalKnowledgeGraphAI:
             },
             # 症状相关
             'symptoms': {
-                'keywords': ['症状', '表现', '征兆', '感觉', '不适'],
+                'keywords': ['症状', '表现', '征兆', '感觉', '不适', '有什么症状', '症状是什么', '症状有哪些', '的症状'],
                 'relation': '症状',
                 'target_type': 'symptom'
             },
@@ -693,18 +693,34 @@ class MedicalKnowledgeGraphAI:
         # 检测查询意图 - 优先检查药物相关意图
         detected_intent = None
         
+        print(f"[调试] 开始意图识别，查询: {query_lower}")
+        
         # 首先检查药物相关意图（优先级最高）
         # 特殊处理"吃什么药"的情况
         if '吃什么药' in query_lower or ('吃什么' in query_lower and '药' in query_lower):
             detected_intent = 'medicine'
+            print(f"[调试] 检测到药物意图: {detected_intent}")
         elif any(keyword in query_lower for keyword in patterns['medicine']['keywords']):
             detected_intent = 'medicine'
+            print(f"[调试] 检测到药物意图: {detected_intent}")
+        # 然后检查症状相关意图（优先级第二）
+        elif any(keyword in query_lower for keyword in patterns['symptoms']['keywords']):
+            detected_intent = 'symptoms'
+            print(f"[调试] 检测到症状意图: {detected_intent}, 匹配关键词: {[k for k in patterns['symptoms']['keywords'] if k in query_lower]}")
         # 然后检查其他意图
         else:
             for intent, pattern in patterns.items():
-                if intent != 'medicine' and any(keyword in query_lower for keyword in pattern['keywords']):
+                if intent not in ['medicine', 'symptoms'] and any(keyword in query_lower for keyword in pattern['keywords']):
                     detected_intent = intent
+                    print(f"[调试] 检测到意图: {intent}, 匹配关键词: {[k for k in pattern['keywords'] if k in query_lower]}")
                     break
+        
+        # 如果没有检测到意图，检查是否是简单的"吃什么"查询
+        if detected_intent is None and '吃什么' in query_lower:
+            detected_intent = 'diet'
+            print(f"[调试] 检测到饮食意图: {detected_intent}")
+        
+        print(f"[调试] 最终检测到的意图: {detected_intent}")
         
         # 提取疾病名称
         disease_keywords = ['感冒', '发烧', '咳嗽', '头痛', '高血压', '糖尿病', '心脏病', '肺炎', '胃炎', '肝炎']
@@ -716,6 +732,10 @@ class MedicalKnowledgeGraphAI:
         
         # 检查是否是症状诊断查询
         is_symptom_diagnosis = self._is_symptom_diagnosis_query(query_lower)
+        
+        # 如果是症状查询（如"感冒的症状是什么？"），不应该被识别为症状诊断查询
+        if detected_intent == 'symptoms' and detected_disease:
+            is_symptom_diagnosis = False
         
         return {
             'original_query': query,
@@ -965,6 +985,11 @@ class MedicalKnowledgeGraphAI:
         if query_intent.get('is_symptom_diagnosis') and query_intent.get('symptoms'):
             print(f"[调试] 症状诊断查询: 症状={query_intent['symptoms']}")
             return self._search_by_symptoms(query_intent['symptoms'], limit)
+        
+        # 如果是症状查询（如"感冒的症状是什么？"），使用关系搜索
+        if query_intent.get('intent') == 'symptoms' and query_intent.get('disease'):
+            print(f"[调试] 症状查询: 疾病={query_intent['disease']}, 关系={query_intent['relation']}")
+            return self._search_by_relation(query_intent['disease'], query_intent['relation'], limit)
         
         # 如果是非结构化查询，使用通用搜索
         if not query_intent['is_structured_query']:
