@@ -681,6 +681,12 @@ class MedicalKnowledgeGraphAI:
                 'keywords': ['并发症', '后果', '影响', '恶化'],
                 'relation': '并发症',
                 'target_type': 'complication'
+            },
+            # 症状诊断相关
+            'diagnosis': {
+                'keywords': ['可能是什么病', '什么病', '诊断', '什么原因', '怎么回事'],
+                'relation': '症状',
+                'target_type': 'diagnosis'
             }
         }
         
@@ -699,14 +705,100 @@ class MedicalKnowledgeGraphAI:
                 detected_disease = disease
                 break
         
+        # 检查是否是症状诊断查询
+        is_symptom_diagnosis = self._is_symptom_diagnosis_query(query_lower)
+        
         return {
             'original_query': query,
             'intent': detected_intent,
             'disease': detected_disease,
             'relation': patterns[detected_intent]['relation'] if detected_intent else None,
             'target_type': patterns[detected_intent]['target_type'] if detected_intent else None,
-            'is_structured_query': detected_intent is not None and detected_disease is not None
+            'is_structured_query': detected_intent is not None and detected_disease is not None,
+            'is_symptom_diagnosis': is_symptom_diagnosis,
+            'symptoms': self._extract_symptoms(query_lower) if is_symptom_diagnosis else []
         }
+    
+    def _is_symptom_diagnosis_query(self, query_lower: str) -> bool:
+        """判断是否是症状诊断查询"""
+        # 诊断相关关键词
+        diagnosis_keywords = [
+            '可能是什么病', '什么病', '诊断', '什么原因', '怎么回事',
+            '我有点', '我有', '我出现', '我得了', '我患了',
+            '症状', '表现', '征兆', '感觉', '不适'
+        ]
+        
+        # 症状关键词
+        symptom_keywords = [
+            '感冒', '发烧', '发热', '咳嗽', '头痛', '头疼', '流鼻涕', '鼻塞',
+            '喉咙痛', '咽痛', '嗓子疼', '打喷嚏', '乏力', '疲劳', '食欲不振',
+            '恶心', '呕吐', '腹泻', '腹痛', '腹胀', '便秘', '失眠', '多梦',
+            '心悸', '胸闷', '气短', '呼吸困难', '胸痛', '背痛', '关节痛',
+            '肌肉酸痛', '皮疹', '瘙痒', '红肿', '水肿', '头晕', '眩晕',
+            '耳鸣', '视力模糊', '眼痛', '眼红', '流泪', '口干', '口苦',
+            '口臭', '牙龈出血', '牙痛', '口腔溃疡', '声音嘶哑', '失声'
+        ]
+        
+        # 检查是否包含诊断关键词和症状关键词
+        has_diagnosis_keyword = any(keyword in query_lower for keyword in diagnosis_keywords)
+        has_symptom_keyword = any(keyword in query_lower for keyword in symptom_keywords)
+        
+        return has_diagnosis_keyword and has_symptom_keyword
+    
+    def _extract_symptoms(self, query_lower: str) -> List[str]:
+        """提取症状关键词"""
+        # 症状映射表
+        symptom_mapping = {
+            '感冒': ['感冒', '上呼吸道感染'],
+            '发烧': ['发烧', '发热', '体温升高'],
+            '咳嗽': ['咳嗽', '咳痰', '干咳'],
+            '头痛': ['头痛', '头疼', '偏头痛'],
+            '流鼻涕': ['流鼻涕', '鼻涕', '鼻塞'],
+            '喉咙痛': ['喉咙痛', '咽痛', '嗓子疼'],
+            '打喷嚏': ['打喷嚏', '喷嚏'],
+            '乏力': ['乏力', '疲劳', '无力'],
+            '食欲不振': ['食欲不振', '不想吃饭', '没胃口'],
+            '恶心': ['恶心', '想吐'],
+            '呕吐': ['呕吐', '吐'],
+            '腹泻': ['腹泻', '拉肚子'],
+            '腹痛': ['腹痛', '肚子疼'],
+            '腹胀': ['腹胀', '肚子胀'],
+            '便秘': ['便秘', '大便干燥'],
+            '失眠': ['失眠', '睡不着'],
+            '心悸': ['心悸', '心跳快'],
+            '胸闷': ['胸闷', '胸口闷'],
+            '气短': ['气短', '呼吸困难'],
+            '胸痛': ['胸痛', '胸口疼'],
+            '背痛': ['背痛', '后背疼'],
+            '关节痛': ['关节痛', '关节疼'],
+            '肌肉酸痛': ['肌肉酸痛', '肌肉疼'],
+            '皮疹': ['皮疹', '红疹'],
+            '瘙痒': ['瘙痒', '痒'],
+            '红肿': ['红肿', '红'],
+            '水肿': ['水肿', '肿'],
+            '头晕': ['头晕', '晕'],
+            '眩晕': ['眩晕', '天旋地转'],
+            '耳鸣': ['耳鸣', '耳朵响'],
+            '视力模糊': ['视力模糊', '看不清'],
+            '眼痛': ['眼痛', '眼睛疼'],
+            '眼红': ['眼红', '眼睛红'],
+            '流泪': ['流泪', '眼泪'],
+            '口干': ['口干', '嘴巴干'],
+            '口苦': ['口苦', '嘴巴苦'],
+            '口臭': ['口臭', '口气'],
+            '牙龈出血': ['牙龈出血', '牙龈'],
+            '牙痛': ['牙痛', '牙齿疼'],
+            '口腔溃疡': ['口腔溃疡', '溃疡'],
+            '声音嘶哑': ['声音嘶哑', '嘶哑'],
+            '失声': ['失声', '说不出话']
+        }
+        
+        extracted_symptoms = []
+        for symptom, keywords in symptom_mapping.items():
+            if any(keyword in query_lower for keyword in keywords):
+                extracted_symptoms.append(symptom)
+        
+        return extracted_symptoms
     
     def _search_by_relation(self, disease: str, relation: str, limit: int = 10) -> List[Dict[str, Any]]:
         """根据疾病和关系搜索相关实体"""
@@ -764,8 +856,108 @@ class MedicalKnowledgeGraphAI:
         print(f"[调试] 关系搜索结果数量: {len(results)}, 耗时 {end_time - start_time:.3f}s")
         return results[:limit] 
 
+    def _search_by_symptoms(self, symptoms: List[str], limit: int = 10) -> List[Dict[str, Any]]:
+        """根据症状搜索可能的疾病"""
+        if not symptoms:
+            return []
+        
+        print(f"[调试] 症状诊断搜索: 症状={symptoms}")
+        start_time = time.time()
+        
+        results = []
+        seen_ids = set()
+        
+        # 优先使用缓存
+        if self._use_cache and graph_cache.get_cached_graph():
+            cached_graph = graph_cache.get_cached_graph()
+            
+            # 通过症状关键词搜索相关疾病
+            for symptom in symptoms:
+                # 搜索包含症状关键词的实体
+                for node in cached_graph.get('nodes', []):
+                    node_label = node.get('label', '').lower()
+                    
+                    # 检查是否是疾病实体且包含症状信息
+                    if (symptom in node_label and 
+                        any(disease_keyword in node_label for disease_keyword in ['感冒', '发烧', '咳嗽', '头痛', '肺炎', '胃炎', '肝炎', '高血压', '糖尿病'])):
+                        
+                        if node.get('id') not in seen_ids:
+                            result = {
+                                **node,
+                                "match_type": "symptom_diagnosis",
+                                "match_score": 85,
+                                "matched_symptoms": [symptom],
+                                "search_method": "symptom_disease_match"
+                            }
+                            results.append(result)
+                            seen_ids.add(node.get('id'))
+                            if len(results) >= limit:
+                                break
+                
+                if len(results) >= limit:
+                    break
+            
+            # 如果症状匹配不够，搜索症状相关的实体
+            if len(results) < limit:
+                for symptom in symptoms:
+                    for node in cached_graph.get('nodes', []):
+                        node_label = node.get('label', '').lower()
+                        
+                        if symptom in node_label and node.get('id') not in seen_ids:
+                            result = {
+                                **node,
+                                "match_type": "symptom_entity",
+                                "match_score": 70,
+                                "matched_symptoms": [symptom],
+                                "search_method": "symptom_entity_match"
+                            }
+                            results.append(result)
+                            seen_ids.add(node.get('id'))
+                            if len(results) >= limit:
+                                break
+                    
+                    if len(results) >= limit:
+                        break
+        else:
+            # 备用搜索
+            for symptom in symptoms:
+                for node in self.knowledge_graph_data.get("nodes", []):
+                    node_label = node.get('label', '').lower()
+                    
+                    if symptom in node_label and node.get('id') not in seen_ids:
+                        # 判断是否是疾病实体
+                        is_disease = any(disease_keyword in node_label for disease_keyword in ['感冒', '发烧', '咳嗽', '头痛', '肺炎', '胃炎', '肝炎', '高血压', '糖尿病'])
+                        
+                        result = {
+                            **node,
+                            "match_type": "symptom_diagnosis" if is_disease else "symptom_entity",
+                            "match_score": 85 if is_disease else 70,
+                            "matched_symptoms": [symptom],
+                            "search_method": "fallback_symptom_search"
+                        }
+                        results.append(result)
+                        seen_ids.add(node.get('id'))
+                        if len(results) >= limit:
+                            break
+                
+                if len(results) >= limit:
+                    break
+        
+        end_time = time.time()
+        print(f"[调试] 症状诊断搜索结果数量: {len(results)}, 耗时 {end_time - start_time:.3f}s")
+        
+        # 按分数排序
+        results.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+        return results[:limit]
+    
     def _search_concurrent(self, query_intent: Dict[str, Any], limit: int = 8) -> List[Dict[str, Any]]:
         """并发搜索相关实体"""
+        # 如果是症状诊断查询，使用症状搜索
+        if query_intent.get('is_symptom_diagnosis') and query_intent.get('symptoms'):
+            print(f"[调试] 症状诊断查询: 症状={query_intent['symptoms']}")
+            return self._search_by_symptoms(query_intent['symptoms'], limit)
+        
+        # 如果是非结构化查询，使用通用搜索
         if not query_intent['is_structured_query']:
             return self.search_entities(query_intent['original_query'], limit)
         
