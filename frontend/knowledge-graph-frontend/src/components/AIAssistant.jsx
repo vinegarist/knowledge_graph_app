@@ -17,7 +17,9 @@ import {
   AlertTriangle,
   Loader2,
   RefreshCw,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 // API基础URL
@@ -34,6 +36,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   const [aiStatus, setAiStatus] = useState('unknown');
   const [searchResults, setSearchResults] = useState([]);
   const [showSearch, setShowSearch] = useState(false);
+  const [collapsedThinkTags, setCollapsedThinkTags] = useState(new Set());
   
   const chatContainerRef = useRef(null);
 
@@ -230,6 +233,60 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
     }
   };
 
+  // 处理think标签折叠
+  const toggleThinkTag = (messageIndex) => {
+    setCollapsedThinkTags(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageIndex)) {
+        newSet.delete(messageIndex);
+      } else {
+        newSet.add(messageIndex);
+      }
+      return newSet;
+    });
+  };
+
+  // 解析消息内容，处理think标签
+  const parseMessageContent = (content, messageIndex) => {
+    if (!content.includes('<think>')) {
+      return [{ type: 'text', content: content }];
+    }
+
+    const thinkRegex = /<think>(.*?)<\/think>/gs;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = thinkRegex.exec(content)) !== null) {
+      // 添加think标签之前的内容
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: content.slice(lastIndex, match.index)
+        });
+      }
+
+      // 添加think标签内容
+      parts.push({
+        type: 'think',
+        content: match[1],
+        isCollapsed: collapsedThinkTags.has(messageIndex)
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // 添加剩余内容
+    if (lastIndex < content.length) {
+      parts.push({
+        type: 'text',
+        content: content.slice(lastIndex)
+      });
+    }
+
+    return parts;
+  };
+
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden">
       {/* AI状态指示器 */}
@@ -278,6 +335,34 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
             >
               <Trash2 className="h-4 w-4" />
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const hasThinkTags = chatHistory.some(msg => msg.content.includes('<think>'));
+                if (hasThinkTags) {
+                  setCollapsedThinkTags(new Set());
+                }
+              }}
+              title="展开所有思考过程"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const thinkMessageIndices = chatHistory
+                  .map((msg, index) => msg.content.includes('<think>') ? index : -1)
+                  .filter(index => index !== -1);
+                if (thinkMessageIndices.length > 0) {
+                  setCollapsedThinkTags(new Set(thinkMessageIndices));
+                }
+              }}
+              title="折叠所有思考过程"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
           </div>
         </div>
         
@@ -286,6 +371,14 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
           💡 本AI仅基于医疗知识图谱数据回答，不使用训练数据或常识。
           <br />
           ⚡ 已启用智能缓存，大幅提升搜索和加载速度。如果知识图谱中没有相关信息，会明确告知。
+          {(() => {
+            const thinkTagCount = chatHistory.filter(msg => msg.content.includes('<think>')).length;
+            return thinkTagCount > 0 ? (
+              <div className="mt-1 text-yellow-700">
+                💭 发现 {thinkTagCount} 个AI思考过程，可点击展开查看推理细节
+              </div>
+            ) : null;
+          })()}
         </div>
       </div>
 
@@ -369,7 +462,42 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
                         ? 'bg-blue-500 text-white' 
                         : 'bg-gray-100 text-gray-800'
                     }`}>
-                      <div className="whitespace-pre-wrap break-words max-w-full overflow-hidden">{message.content}</div>
+                      <div className="whitespace-pre-wrap break-words max-w-full overflow-hidden">
+                        {(() => {
+                          const parsedContent = parseMessageContent(message.content, index);
+                          
+                          return parsedContent.map((part, partIndex) => {
+                            if (part.type === 'text') {
+                              return <span key={partIndex}>{part.content}</span>;
+                            } else if (part.type === 'think') {
+                              return (
+                                <div key={partIndex} className="mt-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs bg-gradient-to-r from-yellow-50 to-orange-50 hover:from-yellow-100 hover:to-orange-100 border border-yellow-300 text-yellow-800 font-medium"
+                                    onClick={() => toggleThinkTag(index)}
+                                  >
+                                    {part.isCollapsed ? (
+                                      <ChevronDown className="h-3 w-3 mr-1" />
+                                    ) : (
+                                      <ChevronUp className="h-3 w-3 mr-1" />
+                                    )}
+                                    💭 AI思考过程 {part.isCollapsed ? '展开' : '折叠'}
+                                  </Button>
+                                  {!part.isCollapsed && (
+                                    <div className="mt-2 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-300 rounded-lg text-xs text-gray-700 shadow-sm">
+                                      <div className="font-medium text-yellow-800 mb-1">🤔 AI推理过程：</div>
+                                      <div className="whitespace-pre-wrap">{part.content}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          });
+                        })()}
+                      </div>
                       <div className="text-xs opacity-70 mt-1">{message.timestamp}</div>
                       
                       {/* AI回答的相关实体 */}
