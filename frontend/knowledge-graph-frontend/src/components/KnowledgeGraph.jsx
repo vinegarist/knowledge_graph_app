@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import AIAssistant from './AIAssistant';
 
 // API基础URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:8080/api';
 
 const KnowledgeGraph = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });

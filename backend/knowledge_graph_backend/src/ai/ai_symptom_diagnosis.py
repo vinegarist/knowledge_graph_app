@@ -9,8 +9,8 @@ import json
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 import requests
-from .medical_ai import MedicalKnowledgeGraphAI
-from ..config.ai_config import AIConfig
+from ai.medical_ai import MedicalKnowledgeGraphAI
+from config.ai_config import AIConfig
 
 
 class AISymptomDiagnosisEngine:
@@ -318,4 +318,4 @@ class AISymptomDiagnosisEngine:
             "avg_symptoms_per_disease": sum(len(self._get_disease_symptoms(d)) for d in self._disease_symptom_cache.keys()) / len(self._disease_symptom_cache) if self._disease_symptom_cache else 0,
             "avg_diseases_per_symptom": sum(len(self._get_symptom_diseases(s)) for s in self._symptom_disease_cache.keys()) / len(self._symptom_disease_cache) if self._symptom_disease_cache else 0,
             "ai_enabled": True
-        } 
+        }

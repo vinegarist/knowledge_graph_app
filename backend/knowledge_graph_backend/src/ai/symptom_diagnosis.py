@@ -10,8 +10,8 @@ import hashlib
 from typing import List, Dict, Any, Set, Optional
 from collections import defaultdict
 import concurrent.futures
-from .medical_ai import MedicalKnowledgeGraphAI
-from ..utils import graph_cache
+from ai.medical_ai import MedicalKnowledgeGraphAI
+from utils import graph_cache
 
 
 def ensure_json_serializable(obj):
@@ -485,4 +485,4 @@ class SymptomDiagnosisEngine:
             "avg_diseases_per_symptom": sum(len(diseases) for diseases in self._symptom_disease_cache.values()) / len(self._symptom_disease_cache) if self._symptom_disease_cache else 0,
             "cache_enabled": self._use_cache,
             "cache_file": self._cache_file if os.path.exists(self._cache_file) else None
-        } 
+        }

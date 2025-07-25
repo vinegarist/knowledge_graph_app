@@ -1,35 +1,48 @@
-import os
-import sys
-# DON'T CHANGE THIS !!!
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-from flask import Flask, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-from src.models.user import db
-from src.routes.user import user_bp
-from src.routes.knowledge_graph import knowledge_graph_bp
-from src.routes.ai_assistant import ai_bp
-from src.routes.symptom_diagnosis import symptom_diagnosis_bp, init_diagnosis_engine
-from src.routes.ai_symptom_diagnosis import ai_symptom_diagnosis_bp, init_ai_diagnosis_engine
+from flask_sqlalchemy import SQLAlchemy
+import os
+from pathlib import Path
 
-app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+# 导入蓝图
+from routes.user import user_bp
+from routes.knowledge_graph import knowledge_graph_bp
+from routes.ai_assistant import ai_bp
+from routes.symptom_diagnosis import symptom_diagnosis_bp, init_diagnosis_engine
+from routes.ai_symptom_diagnosis import ai_symptom_diagnosis_bp, init_ai_diagnosis_engine
+from models.user import db
 
-# 启用CORS
-CORS(app)
+# 创建Flask应用
+app = Flask(__name__)
 
+# 应用配置
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///knowledge_graph.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# 配置CORS
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:5174", "http://127.0.0.1:5174"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
+# 初始化数据库
+db.init_app(app)
+
+# 创建数据库表
+with app.app_context():
+    db.create_all()
+    print("数据库表已创建")
+
+# 注册蓝图
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(knowledge_graph_bp, url_prefix='/api')
 app.register_blueprint(ai_bp, url_prefix='/api')
-app.register_blueprint(symptom_diagnosis_bp, url_prefix='/api/symptom-diagnosis')
-app.register_blueprint(ai_symptom_diagnosis_bp, url_prefix='/api/ai-symptom-diagnosis')
-
-# uncomment if you need to use database
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
-with app.app_context():
-    db.create_all()
+app.register_blueprint(symptom_diagnosis_bp, url_prefix='/api')
+app.register_blueprint(ai_symptom_diagnosis_bp, url_prefix='/api')
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -49,4 +62,4 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)

@@ -11,15 +11,24 @@ import signal
 import threading
 from pathlib import Path
 
-def check_port(port, host='localhost'):
+def check_port(port, service_name=None, host='localhost'):
     """检查端口是否被占用"""
     import socket
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(1)
             result = s.connect_ex((host, port))
-            return result == 0
-    except:
+            if result == 0:
+                if service_name:
+                    print(f"✓ {service_name} 正在端口 {port} 上运行")
+                return True
+            else:
+                if service_name:
+                    print(f"✗ {service_name} 未在端口 {port} 上运行")
+                return False
+    except Exception as e:
+        if service_name:
+            print(f"✗ 检查端口 {port} 时出错: {e}")
         return False
 
 def check_ollama_service():
@@ -72,11 +81,12 @@ def start_ollama():
 
 def start_backend():
     """启动后端服务"""
-    print("🚀 启动后端服务...")
+    print("\n=== 启动后端服务 ===")
     
-    if check_backend_service():
-        print("✅ 后端服务已在运行")
-        return None
+    # 检查后端是否已经在运行
+    if check_port(8080, "后端服务"):
+        print("后端服务已在运行，跳过启动")
+        return True
     
     backend_dir = Path(__file__).parent / "backend" / "knowledge_graph_backend"
     
@@ -93,7 +103,7 @@ def start_backend():
         
         # 等待服务启动
         for i in range(30):
-            if check_port(5000):
+            if check_port(8080):
                 print("✅ 后端服务启动成功")
                 return process
             time.sleep(1)
@@ -109,7 +119,7 @@ def start_frontend():
     """启动前端服务"""
     print("🚀 启动前端服务...")
     
-    if check_port(5173):  # Vite默认端口
+    if check_port(5174):  # Vite默认端口
         print("✅ 前端服务已在运行")
         return None
     
@@ -134,7 +144,7 @@ def start_frontend():
         
         # 等待服务启动
         for i in range(30):
-            if check_port(5173):
+            if check_port(5174):
                 print("✅ 前端服务启动成功")
                 return process
             time.sleep(1)
@@ -209,12 +219,16 @@ def main():
         print("\n" + "=" * 60)
         print("🎉 系统启动完成！")
         print("=" * 60)
-        print("📊 知识图谱系统: http://localhost:5173")
-        print("🤖 AI助手API: http://localhost:5000/api/ai/status")
+        print("\n=== 系统状态检查 ===")
+        ollama_running = check_port(11434, "Ollama服务")
+        backend_running = check_port(8080, "后端服务")
+        frontend_running = check_port(5174, "前端服务")
+        print("📊 知识图谱系统: http://localhost:5174")
+        print("🤖 AI助手API: http://localhost:8080/api/ai/status")
         print("🛠️ Ollama服务: http://localhost:11434")
         print("=" * 60)
         print("💡 使用说明:")
-        print("   - 在浏览器中访问 http://localhost:5173")
+        print("   - 在浏览器中访问 http://localhost:5174")
         print("   - 点击顶部'AI助手'标签使用AI功能")
         print("   - 按Ctrl+C退出所有服务")
         print("=" * 60)
@@ -255,4 +269,4 @@ def main():
                     pass
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 // API基础URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:8080/api';
 
 const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   const [question, setQuestion] = useState('');
@@ -703,4 +703,4 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   );
 };
 
-export default AIAssistant; 
+export default AIAssistant;

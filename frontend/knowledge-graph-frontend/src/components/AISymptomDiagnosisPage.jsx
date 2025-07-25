@@ -20,7 +20,7 @@ const AISymptomDiagnosisPage = () => {
   const [error, setError] = useState('');
   const [statistics, setStatistics] = useState(null);
 
-  const API_BASE_URL = 'http://localhost:5000/api/ai-symptom-diagnosis';
+  const API_BASE_URL = 'http://localhost:8080/api/ai-symptom-diagnosis';
 
   useEffect(() => {
     loadStatistics();
@@ -446,4 +446,4 @@ const AISymptomDiagnosisPage = () => {
   );
 };
 
-export default AISymptomDiagnosisPage; 
+export default AISymptomDiagnosisPage;

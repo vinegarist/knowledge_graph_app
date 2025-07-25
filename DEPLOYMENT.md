@@ -31,11 +31,11 @@ cd frontend/knowledge-graph-frontend
 pnpm run dev --host
 ```
 
-前端服务将在 `http://localhost:5173` 启动。
+前端服务将在 `http://localhost:5174` 启动。
 
 #### 3. 访问应用
 
-打开浏览器访问 `http://localhost:5173` 即可使用应用。
+打开浏览器访问 `http://localhost:5174` 即可使用应用。
 
 ### 方式二：生产环境部署
 

@@ -10,8 +10,8 @@ import time # Added for timing in _search_by_relation
 import asyncio
 import concurrent.futures
 
-from src.config.ai_config import AIConfig, ModelType
-from src.utils.graph_cache import graph_cache
+from config.ai_config import AIConfig, ModelType
+from utils.graph_cache import graph_cache
 
 class MedicalKnowledgeGraphAI:
     """医疗知识图谱AI助手"""
@@ -1061,4 +1061,4 @@ class MedicalKnowledgeGraphAI:
         
         # 按分数排序
         results.sort(key=lambda x: x.get('match_score', 0), reverse=True)
-        return results[:limit] 
+        return results[:limit]

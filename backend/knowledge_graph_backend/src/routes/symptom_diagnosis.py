@@ -6,8 +6,8 @@
 from flask import Blueprint, request, jsonify
 from typing import List, Dict, Any
 import traceback
-from ..ai.symptom_diagnosis import SymptomDiagnosisEngine
-from ..ai.medical_ai import MedicalKnowledgeGraphAI
+from ai.symptom_diagnosis import SymptomDiagnosisEngine
+from ai.medical_ai import MedicalKnowledgeGraphAI
 
 # 创建蓝图
 symptom_diagnosis_bp = Blueprint('symptom_diagnosis', __name__)
@@ -348,4 +348,4 @@ def rebuild_diagnosis_mapping():
         return jsonify({
             "success": False,
             "message": f"重新构建映射失败: {str(e)}"
-        }), 500 
+        }), 500

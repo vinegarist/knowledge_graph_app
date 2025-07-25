@@ -184,7 +184,7 @@ npm run dev
 ```
 
 ### 4. 访问系统
-- 前端地址：http://localhost:5173
+- 前端地址：http://localhost:5174
 - 后端API：http://localhost:5000
 - 选择"AI诊断"标签页
 

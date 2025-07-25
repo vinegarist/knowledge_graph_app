@@ -52,7 +52,7 @@ const SymptomDiagnosisPage = () => {
   const [stats, setStats] = useState(null);
   const [activeTab, setActiveTab] = useState('diagnosis'); // diagnosis, history, stats
 
-  const API_BASE_URL = 'http://localhost:5000/api/symptom-diagnosis';
+  const API_BASE_URL = 'http://localhost:8080/api/symptom-diagnosis';
   const messagesEndRef = useRef(null);
 
   // 加载可用症状列表和统计信息
@@ -847,4 +847,4 @@ const SymptomDiagnosisPage = () => {
   );
 };
 
-export default SymptomDiagnosisPage; 
+export default SymptomDiagnosisPage;

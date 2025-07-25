@@ -4,8 +4,8 @@ AI驱动的症状诊断路由
 
 from flask import Blueprint, request, jsonify
 import traceback
-from ..ai.ai_symptom_diagnosis import AISymptomDiagnosisEngine
-from ..ai.medical_ai import MedicalKnowledgeGraphAI
+from ai.ai_symptom_diagnosis import AISymptomDiagnosisEngine
+from ai.medical_ai import MedicalKnowledgeGraphAI
 
 ai_symptom_diagnosis_bp = Blueprint('ai_symptom_diagnosis', __name__)
 ai_diagnosis_engine = None
@@ -287,4 +287,4 @@ def get_ai_available_diseases():
         return jsonify({
             "success": False,
             "message": f"获取疾病列表失败: {str(e)}"
-        }), 500 
+        }), 500

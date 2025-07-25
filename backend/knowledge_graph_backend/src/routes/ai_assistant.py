@@ -5,10 +5,10 @@ from flask import Blueprint, jsonify, request
 from flask_cors import CORS
 import json
 import os
-from src.ai.medical_ai import MedicalKnowledgeGraphAI
-from src.utils.graph_cache import graph_cache
-from src.routes.symptom_diagnosis import init_diagnosis_engine
-from src.routes.ai_symptom_diagnosis import init_ai_diagnosis_engine
+from ai.medical_ai import MedicalKnowledgeGraphAI
+from utils.graph_cache import graph_cache
+from routes.symptom_diagnosis import init_diagnosis_engine
+from routes.ai_symptom_diagnosis import init_ai_diagnosis_engine
 
 ai_bp = Blueprint('ai_assistant', __name__)
 CORS(ai_bp)
@@ -314,4 +314,4 @@ def reload_knowledge_graph():
         
     except Exception as e:
         print(f"[错误] 重新加载知识图谱失败: {str(e)}")
-        return jsonify({'error': f'重新加载时出错: {str(e)}'}), 500 
+        return jsonify({'error': f'重新加载时出错: {str(e)}'}), 500

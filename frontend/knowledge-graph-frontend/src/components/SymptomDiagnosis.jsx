@@ -29,7 +29,7 @@ const SymptomDiagnosis = () => {
   const [answers, setAnswers] = useState({});
   const [showAvailableSymptoms, setShowAvailableSymptoms] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:5000/api/symptom-diagnosis';
+  const API_BASE_URL = 'http://localhost:8080/api/symptom-diagnosis';
 
   // 加载可用症状列表
   useEffect(() => {
@@ -438,4 +438,4 @@ const SymptomDiagnosis = () => {
   );
 };
 
-export default SymptomDiagnosis; 
+export default SymptomDiagnosis;
