@@ -21,9 +21,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-
-// API基础URL
-const API_BASE_URL = 'http://localhost:8080/api';
+import { AI_ASSISTANT_API_URL } from '../config/api';
 
 const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   const [question, setQuestion] = useState('');
@@ -43,7 +41,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
   // 缓存管理函数
   const clearCache = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/cache/clear`, {
+      const response = await fetch(`${AI_ASSISTANT_API_URL}/ai/cache/clear`, {
         method: 'POST',
       });
       const data = await response.json();
@@ -59,7 +57,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
   const reloadCache = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/cache/reload`, {
+      const response = await fetch(`${AI_ASSISTANT_API_URL}/ai/cache/reload`, {
         method: 'POST',
       });
       const data = await response.json();
@@ -87,7 +85,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
   const checkAIStatus = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/status`);
+      const response = await fetch(`${AI_ASSISTANT_API_URL}/ai/status`);
       const data = await response.json();
       setAiStatus(data.success ? 'ready' : 'error');
     } catch (error) {
@@ -114,7 +112,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
     setChatHistory(prev => [...prev, userMessage]);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/chat`, {
+      const response = await fetch(`${AI_ASSISTANT_API_URL}/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -161,7 +159,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
   const clearHistory = async () => {
     try {
-      await fetch(`${API_BASE_URL}/ai/history`, {
+      await fetch(`${AI_ASSISTANT_API_URL}/ai/history`, {
         method: 'DELETE',
       });
       setChatHistory([]);
@@ -175,7 +173,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
 
   const handleSourcePagination = async (action) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/sources/page`, {
+      const response = await fetch(`${AI_ASSISTANT_API_URL}/ai/sources/page`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,7 +200,7 @@ const AIAssistant = ({ onEntityFocus, onEntitySearch }) => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/search?q=${encodeURIComponent(query)}&limit=5`);
+      const response = await fetch(`${AI_ASSISTANT_API_URL}/ai/search?q=${encodeURIComponent(query)}&limit=5`);
       const data = await response.json();
       
       if (data.success) {

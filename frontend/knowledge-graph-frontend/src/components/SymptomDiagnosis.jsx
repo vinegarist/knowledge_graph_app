@@ -17,6 +17,7 @@ import {
   Thermometer,
   Activity
 } from 'lucide-react';
+import { SYMPTOM_DIAGNOSIS_API_URL } from '../config/api';
 
 const SymptomDiagnosis = () => {
   const [symptoms, setSymptoms] = useState([]);
@@ -29,7 +30,7 @@ const SymptomDiagnosis = () => {
   const [answers, setAnswers] = useState({});
   const [showAvailableSymptoms, setShowAvailableSymptoms] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:8080/api/symptom-diagnosis';
+
 
   // 加载可用症状列表
   useEffect(() => {
@@ -38,7 +39,7 @@ const SymptomDiagnosis = () => {
 
   const loadAvailableSymptoms = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/symptoms`);
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/symptoms`);
       const data = await response.json();
       if (data.success) {
         setAvailableSymptoms(data.data.symptoms);
@@ -64,7 +65,7 @@ const SymptomDiagnosis = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/diagnose`, {
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/diagnose`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ const SymptomDiagnosis = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/interactive/start`, {
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/interactive/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +125,7 @@ const SymptomDiagnosis = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/interactive/answer`, {
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/interactive/answer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

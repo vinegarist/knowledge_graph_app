@@ -6,9 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Upload, Search, Download, ZoomIn, ZoomOut, Maximize2, ChevronLeft, ChevronRight, Info, Target, RotateCcw, MapPin, X, Bot } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
 import AIAssistant from './AIAssistant';
-
-// API基础URL
-const API_BASE_URL = 'http://localhost:8080/api';
+import { KNOWLEDGE_GRAPH_API_URL } from '../config/api';
 
 const KnowledgeGraph = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -40,7 +38,7 @@ const KnowledgeGraph = () => {
   // 获取图谱基本信息
   const fetchGraphInfo = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/graph/info`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/graph/info`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -59,7 +57,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/graph?page=${page}&page_size=${size}`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/graph?page=${page}&page_size=${size}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -140,7 +138,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/node/neighbors?id=${encodeURIComponent(nodeId)}`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/node/neighbors?id=${encodeURIComponent(nodeId)}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -205,7 +203,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/node/expand?id=${encodeURIComponent(nodeId)}`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/node/expand?id=${encodeURIComponent(nodeId)}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -265,7 +263,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/upload`, {
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/upload`, {
         method: 'POST',
         body: formData
       });
@@ -317,7 +315,7 @@ const KnowledgeGraph = () => {
 
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/search?q=${encodeURIComponent(searchQuery)}&page_size=${pageSize}`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/search?q=${encodeURIComponent(searchQuery)}&page_size=${pageSize}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -351,7 +349,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/search/navigate?q=${encodeURIComponent(searchQuery)}&page_size=${pageSize}&entity_index=${entityIndex}`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/search/navigate?q=${encodeURIComponent(searchQuery)}&page_size=${pageSize}&entity_index=${entityIndex}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -408,7 +406,7 @@ const KnowledgeGraph = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/node/neighbors?id=${encodeURIComponent(entityId)}`);
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/node/neighbors?id=${encodeURIComponent(entityId)}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

@@ -6,6 +6,7 @@ import { Badge } from './ui/badge';
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
 import { Loader2, Search, Brain, MessageSquare, AlertTriangle, CheckCircle, XCircle, Plus, Minus } from 'lucide-react';
+import { AI_SYMPTOM_DIAGNOSIS_API_URL } from '../config/api';
 
 const AISymptomDiagnosisPage = () => {
   const [symptoms, setSymptoms] = useState([]);
@@ -20,7 +21,7 @@ const AISymptomDiagnosisPage = () => {
   const [error, setError] = useState('');
   const [statistics, setStatistics] = useState(null);
 
-  const API_BASE_URL = 'http://localhost:8080/api/ai-symptom-diagnosis';
+
 
   useEffect(() => {
     loadStatistics();
@@ -29,7 +30,7 @@ const AISymptomDiagnosisPage = () => {
 
   const loadStatistics = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/statistics`);
+      const response = await fetch(`${AI_SYMPTOM_DIAGNOSIS_API_URL}/statistics`);
       const data = await response.json();
       if (data.success) {
         setStatistics(data.data);
@@ -41,7 +42,7 @@ const AISymptomDiagnosisPage = () => {
 
   const loadAvailableSymptoms = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/symptoms`);
+      const response = await fetch(`${AI_SYMPTOM_DIAGNOSIS_API_URL}/symptoms`);
       const data = await response.json();
       if (data.success) {
         setAvailableSymptoms(data.data.symptoms);
@@ -73,7 +74,7 @@ const AISymptomDiagnosisPage = () => {
     setDiagnosisResult(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/diagnose`, {
+      const response = await fetch(`${AI_SYMPTOM_DIAGNOSIS_API_URL}/diagnose`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,7 +108,7 @@ const AISymptomDiagnosisPage = () => {
     setCurrentSymptoms([...symptoms]);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/interactive/start`, {
+      const response = await fetch(`${AI_SYMPTOM_DIAGNOSIS_API_URL}/interactive/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +144,7 @@ const AISymptomDiagnosisPage = () => {
     setError('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/interactive/answer`, {
+      const response = await fetch(`${AI_SYMPTOM_DIAGNOSIS_API_URL}/interactive/answer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

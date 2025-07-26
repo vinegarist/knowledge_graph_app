@@ -72,7 +72,7 @@ function App() {
     setIsLoadingData(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/knowledge-graph/nodes', {
+      const response = await fetch(`${KNOWLEDGE_GRAPH_API_URL}/knowledge-graph/nodes`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
