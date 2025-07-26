@@ -34,6 +34,7 @@ import {
   Shield,
   Star
 } from 'lucide-react';
+import { SYMPTOM_DIAGNOSIS_API_URL } from '../config/api';
 
 const SymptomDiagnosisPage = () => {
   const [symptoms, setSymptoms] = useState([]);
@@ -52,7 +53,7 @@ const SymptomDiagnosisPage = () => {
   const [stats, setStats] = useState(null);
   const [activeTab, setActiveTab] = useState('diagnosis'); // diagnosis, history, stats
 
-  const API_BASE_URL = 'http://localhost:8080/api/symptom-diagnosis';
+
   const messagesEndRef = useRef(null);
 
   // 加载可用症状列表和统计信息
@@ -68,7 +69,7 @@ const SymptomDiagnosisPage = () => {
 
   const loadAvailableSymptoms = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/symptoms`);
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/symptoms`);
       const data = await response.json();
       if (data.success) {
         setAvailableSymptoms(data.data.symptoms);
@@ -80,7 +81,7 @@ const SymptomDiagnosisPage = () => {
 
   const loadStatistics = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/statistics`);
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/statistics`);
       const data = await response.json();
       if (data.success) {
         setStats(data.data);
@@ -119,7 +120,7 @@ const SymptomDiagnosisPage = () => {
     addMessageToHistory('user', `症状: ${symptoms.join('、')}`);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/diagnose`, {
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/diagnose`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +159,7 @@ const SymptomDiagnosisPage = () => {
     addMessageToHistory('user', `开始交互式诊断，症状: ${symptoms.join('、')}`);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/interactive/start`, {
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/interactive/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,7 +192,7 @@ const SymptomDiagnosisPage = () => {
     addMessageToHistory('user', `回答问题: ${JSON.stringify(answers)}`);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/interactive/answer`, {
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/interactive/answer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -238,7 +239,7 @@ const SymptomDiagnosisPage = () => {
 
   const getDiseaseDetails = async (disease) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/disease/${encodeURIComponent(disease)}`);
+      const response = await fetch(`${SYMPTOM_DIAGNOSIS_API_URL}/disease/${encodeURIComponent(disease)}`);
       const data = await response.json();
       if (data.success) {
         setDiseaseDetails(data.data);

@@ -20,10 +20,10 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-i
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///knowledge_graph.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 配置CORS
+# 配置CORS - 允许所有来源访问（开发环境）
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5174", "http://127.0.0.1:5174", "http://100.71.94.3:5174"],
+        "origins": "*",  # 允许所有来源
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
