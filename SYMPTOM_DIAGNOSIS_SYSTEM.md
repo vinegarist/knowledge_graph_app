@@ -239,7 +239,7 @@ python test_symptom_diagnosis_system.py
 
 ## 更新日志
 
-### v1.0.0 (2024-01-XX)
+### v1.0.0 (2025-01-XX)
 - 初始版本发布
 - 基本症状诊断功能
 - 交互式诊断功能

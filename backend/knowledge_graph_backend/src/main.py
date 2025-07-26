@@ -41,8 +41,8 @@ with app.app_context():
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(knowledge_graph_bp, url_prefix='/api')
 app.register_blueprint(ai_bp, url_prefix='/api')
-app.register_blueprint(symptom_diagnosis_bp, url_prefix='/api')
-app.register_blueprint(ai_symptom_diagnosis_bp, url_prefix='/api')
+app.register_blueprint(symptom_diagnosis_bp, url_prefix='/api/symptom-diagnosis')
+app.register_blueprint(ai_symptom_diagnosis_bp, url_prefix='/api/ai-symptom-diagnosis')
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

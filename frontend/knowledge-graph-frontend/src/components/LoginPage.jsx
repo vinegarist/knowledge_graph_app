@@ -269,7 +269,7 @@ const LoginPage = ({ onLogin }) => {
         </Card>
         
         <div className="text-center mt-6 text-sm text-gray-500">
-          <p>© 2024 医学知识图谱系统. 保留所有权利.</p>
+          <p>© 2025 医学知识图谱系统. </p>
         </div>
       </div>
     </div>
