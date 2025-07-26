@@ -13,6 +13,7 @@ import {
   LogOut,
   User
 } from 'lucide-react';
+import { AUTH_API_URL, KNOWLEDGE_GRAPH_API_URL } from './config/api';
 import './App.css';
 
 function App() {
@@ -44,7 +45,7 @@ function App() {
   // 验证token
   const verifyToken = async (token) => {
     try {
-      const response = await fetch('http://localhost:8080/api/auth/verify', {
+      const response = await fetch(`${AUTH_API_URL}/verify`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

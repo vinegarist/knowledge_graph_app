@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
 import { Eye, EyeOff, User, Lock, Mail, Brain } from 'lucide-react';
+import { AUTH_API_URL } from '../config/api';
 
 const LoginPage = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +32,7 @@ const LoginPage = ({ onLogin }) => {
     setError('');
     
     try {
-      const response = await fetch('http://localhost:8080/api/auth/login', {
+      const response = await fetch(`${AUTH_API_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,7 +69,7 @@ const LoginPage = ({ onLogin }) => {
     }
     
     try {
-      const response = await fetch('http://localhost:8080/api/auth/register', {
+      const response = await fetch(`${AUTH_API_URL}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

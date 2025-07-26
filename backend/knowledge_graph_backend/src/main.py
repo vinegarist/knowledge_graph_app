@@ -23,7 +23,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # 配置CORS
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5174", "http://127.0.0.1:5174"],
+        "origins": ["http://localhost:5174", "http://127.0.0.1:5174", "http://100.71.94.3:5174"],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
